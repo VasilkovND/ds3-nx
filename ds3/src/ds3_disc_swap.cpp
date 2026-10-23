@@ -9,8 +9,8 @@
 //   d:, \Device\Cdrom0    the disc in the drive (disc 1 or 2), switched by XamSwapDisc
 //
 // The game asks for disc 2 at chapter 5 (disc1_info.txt / disc2_info.txt list the chapters). What differs from
-// Dead Space 2: the disc is identified by deadspace_game_f.xex (default.xex is only a launcher), and the address of
-// XamSwapDisc's import thunk is looked up in the executable's import table instead of being a fixed TU address.
+// Dead Space 2: the disc is identified by deadspace_game_f.xex (the game module), and XamSwapDisc is taken over through
+// the SDK's handler (sdk-patches/0014) instead of rebinding an import thunk at a fixed TU address.
 
 #include "ds3_pch.h"
 #include "ds3_disc_swap.h"
@@ -21,8 +21,6 @@
 #include <rex/runtime.h>
 #include <rex/system/function_dispatcher.h>
 #include <rex/system/kernel_state.h>
-#include <rex/system/user_module.h>
-#include <rex/system/xex_module.h>
 #include <rex/system/util/xex2_info.h>
 #include <rex/system/xevent.h>
 #include <rex/thread.h>
@@ -44,7 +42,6 @@ constexpr std::array<const char*, 2> kAliases{"d:", "\\Device\\Cdrom0"};
 constexpr const char* kUpdate = "\\Device\\Ds3TitleUpdate";
 constexpr uint32_t kTitleId = 0x4541099D;
 constexpr const char* kGameXex = "deadspace_game_f.xex";
-constexpr uint32_t kXamSwapDiscOrdinal = 0xA28;  // xam export (sdk/src/kernel/xam/export_table.inc)
 
 VirtualFileSystem* fs = nullptr;
 std::array<Entry*, 2> roots{};
@@ -167,23 +164,16 @@ void Prepare(rex::Runtime& runtime, const std::filesystem::path& update_director
 
 REX_EXTERN(ds3_XamSwapDisc);
 
+namespace rex::kernel::xam {
+void SetSwapDiscHandler(void (*handler)(PPCContext& ctx, uint8_t* base));  // sdk-patches/0014
+}
+
 namespace ds3::disc_swap {
-// The executable's import thunk for XamSwapDisc is bound to the kernel's export when the module loads (the SDK's is a
-// stub that does nothing); bind it to the handler below instead, as Dead Space 2's PC build does.
-void RegisterImport(rex::Runtime& runtime) {
-  auto module = rex::system::kernel_state()->GetExecutableModule();
-  if (!module || !module->xex_module()) throw std::runtime_error("No executable module to bind XamSwapDisc in");
-  for (const auto& library : *module->xex_module()->import_libraries()) {
-    if (library.name.find("xam") == std::string::npos) continue;
-    for (const auto& import : library.imports) {
-      if (import.ordinal != kXamSwapDiscOrdinal || !import.thunk_address) continue;
-      if (!runtime.function_dispatcher()->SetFunction(import.thunk_address, ds3_XamSwapDisc))
-        throw std::runtime_error("Cannot bind XamSwapDisc");
-      REXLOG_INFO("ds3: XamSwapDisc import at {:08X} bound to the disc swap", import.thunk_address);
-      return;
-    }
-  }
-  REXLOG_WARN("ds3: the executable imports no XamSwapDisc; disc 2 will not be swapped in");
+// The game module calls the SDK's XamSwapDisc export directly (an import, not a thunk the dispatcher could rebind, as
+// Dead Space 2's port did): the SDK hands the call to this handler instead of its stub.
+void RegisterImport(rex::Runtime&) {
+  rex::kernel::xam::SetSwapDiscHandler(ds3_XamSwapDisc);
+  REXLOG_INFO("ds3: XamSwapDisc goes to the disc swap");
 }
 }  // namespace ds3::disc_swap
 

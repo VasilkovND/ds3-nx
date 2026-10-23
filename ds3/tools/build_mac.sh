@@ -84,7 +84,7 @@ fi
 
 # The mirror of the generated tree (tools/prepare_tree.py) is made at configure time: refreshed here as well, for files
 # the codegen passes add (ds3_inline_helpers.h) and changes to the Switch PCH (tools/make_nx_pch.py).
-python3 ds3/tools/prepare_tree.py ds3/out/codegen/generated/default ds3/out/sw/generated_nx | tail -1
+for m in default game; do python3 ds3/tools/prepare_tree.py ds3/out/codegen/generated/$m ds3/out/sw/generated_nx/$m | tail -1; done
 
 echo "== build ($JOBS jobs)"
 cmake --build ds3/out/sw -j "$JOBS"

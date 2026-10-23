@@ -1,9 +1,9 @@
 # ds3 - Dead Space 3 (Xbox 360, Title Update 1) on the Nintendo Switch.
 #
-# The recompiled game code is generated from your own deadspace_game_f.xex + deadspace_game_f.xexp by tools/codegen.sh
-# (ReXGlue's codegen, with codegen/names.toml), never committed. Point DS3_CODEGEN_DIR at its output. At configure time
-# tools/prepare_tree.py mirrors generated/default/ as symlinks with a Switch PCH (tools/make_nx_pch.py); see
-# PORTING.md. tools/build_mac.sh does all of it.
+# The recompiled code is generated from your own default.xex and deadspace_game_f.xex with their TU1 patches by
+# tools/codegen.sh (ReXGlue's codegen, with codegen/names*.toml), never committed. Point DS3_CODEGEN_DIR at its output.
+# At configure time tools/prepare_tree.py mirrors generated/default/ and generated/game/ as symlinks with a Switch PCH
+# (tools/make_nx_pch.py); see PORTING.md. tools/build_mac.sh does all of it.
 #
 # Configure (Switch):
 #   cmake -S ds3 -B ds3/out/sw -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -38,10 +38,13 @@ rexglue_switch_add_deko3d(ds3)
 target_compile_definitions(ds3 PRIVATE DS3_DEKO3D=1)
 target_include_directories(ds3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../shaders ${REXSDK_DIR}/thirdparty/xxHash)
 
+# The game itself, deadspace_game_f.xex, a DLL default.xex loads: a guest module linked into the NRO. Its name is the
+# one generated/default/module_registry.cpp registers it under.
 # Hooks on game functions are compiled only when codegen/names.toml names them (the names exist in the generated code
-# only then): ds3_add_hook(<source> <name>...).
+# only then), and into the module (cmake/ds3_switch.cmake says why).
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/codegen/names.toml" DS3_NAMES)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/codegen/names.toml")
+set(DS3_GAME_HOOKS "")
 function(ds3_add_hook source)
     foreach(name IN LISTS ARGN)
         if(NOT DS3_NAMES MATCHES "\nname = \"${name}\"")
@@ -49,11 +52,13 @@ function(ds3_add_hook source)
             return()
         endif()
     endforeach()
-    target_sources(ds3 PRIVATE ${source})
+    list(APPEND DS3_GAME_HOOKS ${source})
+    set(DS3_GAME_HOOKS ${DS3_GAME_HOOKS} PARENT_SCOPE)
     message(STATUS "ds3: ${source} on")
 endfunction()
 ds3_add_hook(src/ds3_shader_dump.cpp ds3_D3DDevice_CreateVertexShader ds3_D3DDevice_CreatePixelShader)
 ds3_add_hook(src/ds3_audio.cpp rw__audio__core__MixWithGain rw__audio__core__CopyWithGain)
+ds3_setup_game_module(ds3 ds3_deadspace_game_f ${DS3_GAME_HOOKS})
 
 # The version (Homebrew Menu and the first lines of the log) and the commit it was built from, so a log a player sends
 # says which build made it. The commit is read when CMake configures (build_mac.sh RECONFIGURE=1 refreshes it).

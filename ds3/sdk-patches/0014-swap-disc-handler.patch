@@ -1,0 +1,23 @@
+diff --git a/src/kernel/xam/xam_info.cpp b/src/kernel/xam/xam_info.cpp
+index 1fda053..2264acc 100644
+--- a/src/kernel/xam/xam_info.cpp
++++ b/src/kernel/xam/xam_info.cpp
+@@ -362,4 +362,17 @@ REX_EXPORT(__imp__XamAlloc, rex::kernel::xam::XamAlloc_entry)
+ REX_EXPORT(__imp__XamFree, rex::kernel::xam::XamFree_entry)
+ REX_EXPORT(__imp__XamQueryLiveHiveW, rex::kernel::xam::XamQueryLiveHiveW_entry)
+ REX_EXPORT(__imp__XamLoaderGetDvdTrayState, rex::kernel::xam::XamLoaderGetDvdTrayState_entry)
+-REX_EXPORT(__imp__XamSwapDisc, rex::kernel::xam::XamSwapDisc_entry)
++// A multi-disc title can take the request over (switch the disc mounts, signal the completion event in r4): the
++// stub above stays the default. The handler gets the guest call as it is.
++namespace rex::kernel::xam {
++static void (*g_swap_disc_handler)(PPCContext& ctx, uint8_t* base) = nullptr;
++void SetSwapDiscHandler(void (*handler)(PPCContext& ctx, uint8_t* base)) { g_swap_disc_handler = handler; }
++}  // namespace rex::kernel::xam
++extern "C" REX_FUNC(__imp__XamSwapDisc) {
++  if (rex::kernel::xam::g_swap_disc_handler) {
++    rex::kernel::xam::g_swap_disc_handler(ctx, base);
++    return;
++  }
++  rex::ppc::HostToGuestFunction<rex::kernel::xam::XamSwapDisc_entry>(ctx, base);
++}
++static rex::ppc::detail::PPCFuncRegistrar _ppc_reg___imp__XamSwapDisc("__imp__XamSwapDisc", &__imp__XamSwapDisc);

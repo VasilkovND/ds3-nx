@@ -116,3 +116,12 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   STFS reader, guest clock patch), with gears2-nx's `match_funcs.py` / `fuzzy_find.py`. Disc 1 (Russia) and TU1 read
   from the user's files; codegen with 0 traps left; names from Dead Space 2. Second codegen issue (gotos into an
   overlapping function) fixed in `patch_branch_traps.py`; first NRO links. Copied to the console with disc 1.
+- 2026-10-24, run 1 on the console: the game thread ended at once ("Execution complete"), then a shutdown crash in
+  the SDK (`MnkInputDriver::DetachFromWindow`, std::system_error). Cause: `deadspace_game_f.xex` is a DLL (module
+  flags 0x9; its entry `xstart` is a DllMain that returns at once without DLL_PROCESS_ATTACH); `default.xex`
+  (0x82000000, 254 functions) is the title that loads it with XexLoadImage. Now both are generated
+  (`[[modules]]` in the manifest, `generated/default` + `generated/game`; `names_default.toml` for the title, 17
+  branch targets), the game is a guest module linked into the NRO (rexglue-sdk-nx's `rexglue_switch_link_module`,
+  from fc3-nx), the hooks on game functions build inside that module, and `XamSwapDisc` goes through a handler the
+  SDK gains in `sdk-patches/0014`. Rebuild in progress when the session ended; not run yet.
+

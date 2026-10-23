@@ -1,0 +1,54 @@
+# Names and hints for default.xex (the title, 0x82000000; TU1 0.0.1.x), as names.toml is for the game module.
+
+# Branch targets the codegen's analysis does not find on its own (tools/codegen.sh lists them; ADD_UNRESOLVED=1).
+
+[entrypoint.functions.0x82012720]
+name = "unresolved_target_82012720"
+
+[entrypoint.functions.0x820134D0]
+name = "unresolved_target_820134D0"
+
+[entrypoint.functions.0x820137C4]
+name = "unresolved_target_820137C4"
+
+[entrypoint.functions.0x82013D6C]
+name = "unresolved_target_82013D6C"
+
+[entrypoint.functions.0x820157D4]
+name = "unresolved_target_820157D4"
+
+[entrypoint.functions.0x820158E0]
+name = "unresolved_target_820158E0"
+
+[entrypoint.functions.0x82015FEC]
+name = "unresolved_target_82015FEC"
+
+[entrypoint.functions.0x82016220]
+name = "unresolved_target_82016220"
+
+[entrypoint.functions.0x82016744]
+name = "unresolved_target_82016744"
+
+[entrypoint.functions.0x82017110]
+name = "unresolved_target_82017110"
+
+[entrypoint.functions.0x82017260]
+name = "unresolved_target_82017260"
+
+[entrypoint.functions.0x820173F8]
+name = "unresolved_target_820173F8"
+
+[entrypoint.functions.0x8201749C]
+name = "unresolved_target_8201749C"
+
+[entrypoint.functions.0x820174B4]
+name = "unresolved_target_820174B4"
+
+[entrypoint.functions.0x820176D8]
+name = "unresolved_target_820176D8"
+
+[entrypoint.functions.0x82017880]
+name = "unresolved_target_82017880"
+
+[entrypoint.functions.0x82017AC8]
+name = "unresolved_target_82017AC8"

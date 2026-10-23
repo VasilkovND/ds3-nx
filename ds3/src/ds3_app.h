@@ -7,9 +7,9 @@
 //   disc2/    the extracted Disc 2 (optional until chapter 5)
 // tools/stage_sd.py makes this layout from your ISOs and title update.
 //
-// The disc's default.xex is only a launcher; the game is deadspace_game_f.xex, the executable the recompiled code
-// comes from, and it is loaded directly. The code is TU1's: it only matches the image the title update patches, so
-// tu/deadspace_game_f.xexp is required (the runtime applies it when it loads the executable).
+// default.xex is the title; the game itself is deadspace_game_f.xex, a DLL it loads with XexLoadImage (both recompiled:
+// the game is a guest module linked into the NRO). The code is TU1's: it only matches the images the title update
+// patches, so tu/ needs both .xexp files (the runtime applies each when it loads its executable).
 
 #pragma once
 
@@ -70,7 +70,7 @@ class Ds3App : public rex::ReXApp {
       return flag.empty() ? folder / name : std::filesystem::path(flag);
     };
     std::error_code ec;
-    for (const char* name : {"deadspace_game_f.xex", "deadspace_game_f.xexp"}) {
+    for (const char* name : {"default.xex", "default.xexp", "deadspace_game_f.xex", "deadspace_game_f.xexp"}) {
       if (!std::filesystem::is_regular_file(game_data_root() / name, ec)) {
         Fail(fmt::format("Dead Space 3: {} is missing from {}. Make the folder with tools/stage_sd.py (INSTALL.md).",
                          name, game_data_root().string()));
@@ -82,7 +82,6 @@ class Ds3App : public rex::ReXApp {
     } catch (const std::exception& error) {
       Fail(std::string("Dead Space 3: ") + error.what());
     }
-    xex_image = "game:\\deadspace_game_f.xex";
     REXLOG_INFO("ds3: title update at {}; loading {}", game_data_root().string(), xex_image);
   }
 
