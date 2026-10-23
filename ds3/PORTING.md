@@ -1,0 +1,118 @@
+# Porting notes: Dead Space 3
+
+Dead Space 3 (Xbox 360, 2013, Visceral Games / EA, Title Update 1) on the Nintendo Switch, as a homebrew NRO. This file
+records the plan, what is known before the first run, and (as they come) every problem met and what fixed it. The
+reference for everything it does not repeat is ds2-nx's `deadspace2/PORTING.md` (Dead Space 2: same studio, engine
+family and EA libraries) and dantes-inferno-nx's `dante/PORTING.md` (the from-scratch codegen this port copies).
+
+## Status
+
+| Step | State |
+| --- | --- |
+| Repository: SDK submodule (rexglue-sdk-nx `f961303`), SDK patches (dantes-inferno-nx 0001-0012 + ds2-nx's guest clock), build scripts, ring reader and renderer glue, disc swap | done |
+| Host `rexglue` (ReXGlue v0.10.0 + Hell's Gate's codegen fixes + `host-patches/0001-dump-image`) | builds (`tools/codegen.sh --host`, ~4 min, 22 MB kept) |
+| Disc 1 + TU1 read (`tools/stage_sd.py`, also straight from a `.7z`) | done, Russia edition (Media ID 4DC6CE0C) |
+| Codegen from `deadspace_game_f.xex` + TU1 | done: 54,556 functions, 200 units, 210 MB of C++, 0 traps left |
+| Names from Dead Space 2 (`tools/match_funcs.py`) | 5,460 exact matches; Create*Shader and the mixer named |
+| NRO links | done: `ds3.nro` 63 MB (882 build steps, ~15 min on 10 M1 Pro cores), shader dump and NEON mixer hooks in |
+| On the console (`/switch/ds3-nx/`: NRO, `tu/`, `disc1/`, over FTP) | first run pending |
+| Boots to the first frame | - |
+| Disc 2 (`stage_sd.py --disc2`), the swap at chapter 5 | needs the user's Disc 2 |
+| Shaders dumped on the console, library and DKSH cache | - |
+| CPU passes: guest registers in host locals (`LOCALREGS=1`) | after the game runs as it is |
+
+## What is known about the game
+
+| | |
+| --- | --- |
+| Title ID | `4541099D` |
+| Discs | two; disc 1 holds chapters 0-4, disc 2 chapters 5-10 (`disc1_info.txt`) |
+| Executables on the disc | `default.xex` (725 KB, a launcher) and `deadspace_game_f.xex` (17 MB, the game) |
+| Title Update 1 | one package per disc edition (Media IDs 0992A619, 0CC756B7, 4DC6CE0C, 7139B889), each with `disc001/` and `disc002/` patches for both executables |
+| Image (TU1, 0.0.1.2) | `0x88000000`-`0x89200000`, code `0x88250000` + 12.1 MB (not `0x82000000` like Dead Space 2) |
+| Videos | VP6 (`VideoDecoder_Vp6`, `attract.vp6`), software-decoded like Dead Space 2's and Dante's Inferno's |
+| Shaders | not in the executable as raw containers (to check on the first run: dumped at creation, as in Dead Space 2) |
+
+**Only the game is recompiled.** `default.xex` is a launcher (Kinect speech data `nuisp*`, avatar assets, the
+`$SystemUpdate` folder sit beside it on the disc); the runtime loads `game:\deadspace_game_f.xex` directly
+(`src/ds3_app.h`). If the game expects launch data from the launcher (`XamLoaderGetLaunchData`), the first log says so
+and the launcher's work moves into the app.
+
+### Files (SHA-256)
+
+| File | Edition | SHA-256 |
+| --- | --- | --- |
+| Disc 1 `deadspace_game_f.xex` (v0.0.0.2) | Russia, 4DC6CE0C | `74776c594043eeffd9ee5eea70201ff9e24dd63b490b9239719d22929a2dbb39` |
+| Disc 1 `default.xex` | Russia, 4DC6CE0C | `52dd44d8bf56f80ed726e27d41f4a2736e029f58cfa4de07faa6fd4a3140353b` |
+| TU1 `disc001/deadspace_game_f.xexp` (`TU_12K22CT_0000008000000.0000000000082`) | 4DC6CE0C | `bc4337a54a1d8f4427afc6d044b0ed444a9be9548fe7e35e87809ad8bc5e0886` |
+| TU1 `disc001/default.xexp` | 4DC6CE0C | `d364efd4484948b3fbfd7a55733efaa5ec24e14d2dd09b6bc6374f49679d533d` |
+
+`tools/codegen.sh` (`TESTED`) and `tools/stage_sd.py` (`TESTED`) check these. Other editions are tried with a warning;
+whether their TU1 images generate the same code as the Russian one (Dead Space 2's World and Russian TU2 did, byte for
+byte) is not known.
+
+## 1. Code
+
+- **No recompiled tree exists for Dead Space 3** (no PC port as of October 2026), so the codegen runs here on the
+  player's executable, as for Dante's Inferno and UFC 3. Dead Space 2's checked-in tree (`src_tu2`) cannot be reused:
+  the generated C++ is tied to one executable's addresses and functions.
+- **Host tool**: ReXGlue v0.10.0 with Hell's Gate's SDK patch (fetched, not copied: no license file), the same
+  `rexglue` dantes-inferno-nx uses. Its data-section function-pointer scan finds 9,613 functions DS3 only reaches
+  through pointers.
+- **Unresolved branches.** The first codegen reported 535 branches into no function (167 addresses). Declared as
+  function entries in `codegen/names.toml` (203 after three rounds, `ADD_UNRESOLVED=1`), all are resolved except 46:
+  conditional branches back to the *first instruction of their own function* (a loop whose head is the entry). ReXGlue
+  classifies those as calls to a function and, finding no call target, writes a trap, although the label `loc_<entry>`
+  is right there. `tools/patch_branch_traps.py` turns each into `goto loc_<entry>;` (and would turn a branch to another
+  function's entry into a tail call). 0 traps remain.
+- **Gotos into another function.** The first build stopped on `label 'loc_88AD50A8' used but not defined`:
+  `sub_88AD4FAC` branches to 0x88AD50A8, inside its own address range, where another function (`sub_88AD50A8`)
+  starts, so the codegen wrote a `goto` but emitted the label only in that other function. 20 such gotos; the same
+  pass makes each a tail call to the function there (17), and the 3 to 0x88760F6C, where no function started, were
+  fixed by naming it in `names.toml`.
+- **Names**: every function is `sub_XXXXXXXX`; the ones the Switch code hooks get names in `codegen/names.toml`, found
+  by matching bodies against Dead Space 2's PDB-named tree (`tools/match_funcs.py`: 5,460 exact matches: rw::audio,
+  EARS, EA::Thread, XDK D3D, ...). `tools/fuzzy_find.py` ranks near matches for the rest (EA::Thread::SetThreadPriority
+  and rw::audio::core::Compressor1::Process only reach ~0.6: not named yet).
+- **Hooks are compiled only when named** (`CMakeLists.txt`, `ds3_add_hook`): today the shader dump
+  (`ds3_D3DDevice_Create{Vertex,Pixel}Shader`, 0x88A2D910 / 0x88A2D728) and the NEON mixer
+  (`rw::audio::core::MixWithGain` / `CopyWithGain`, 0x886BE8E8 / 0x886B56C8).
+- The Switch PCH is dantes-inferno-nx's `make_nx_pch.py` (GCC `DEFINE_REX_FUNC`, per-thread `mtmsrd`, stack accesses
+  without volatile).
+- **CPU passes** (gears2-nx `gow2/CPU_OPTIMIZATION.md`, dantes-inferno-nx `dante/CPU_OPTIMIZATION.md`):
+  `patch_stack_access.py` and `patch_inline_calls.py` run always (229,096 stack accesses; 1,169 same-file calls and
+  35,517 helper calls inlined). `patch_local_regs.py` (guest registers in host locals) waits for `LOCALREGS=1` until
+  the game runs as it is: it must know every guest setjmp/longjmp site first (Dante's Inferno's save system had one;
+  Dead Space 2 had four: Lua's protected call, libpng, JPEG errors).
+
+## 2. Discs
+
+Extracted folders, as in Dead Space 2 (the Switch cannot map a whole ISO): `disc1/`, `disc2/`, and `tu/` with disc 1's
+executables and TU1's patches (`game:`). bigfile0.viv 3.6 GB and bigfile1.viv 3.8 GB on disc 1: FAT32 works.
+`src/ds3_disc_swap.cpp` is ds2-nx's, with two changes: a disc is identified by `deadspace_game_f.xex`'s execution info,
+and the `XamSwapDisc` import thunk is found in the executable's import table (xam ordinal 0xA28) instead of a fixed
+address. To check with disc 2: that disc 2's `deadspace_game_f.xex` + its `disc002` patch load to the same image as
+disc 1's (then one NRO serves both, as in Dead Space 2); if not, the game must keep running disc 1's code after the swap.
+
+`stage_sd.py` reads a disc from the ISO or from a `.7z` holding it, through `7zz e -so` (one pass per directory level,
+then one pass for all files in disc order): the 8.7 GB ISO never has to be unpacked on the computer.
+
+## 3. Plan for the first runs
+
+1. Boot: the log should reach the game's first frame. Expected trouble from earlier ports: `2001-0103` (memory
+   mappings, sdk-patches/0001 handles it), unregistered indirect-call targets (sdk-patches/0007 logs and returns),
+   missing launch data from the launcher, Kinect/NUI calls.
+2. Shaders: the first start without a library writes every container to `shaders_dump/`; copy it back,
+   `tools/shaders.sh`, ship `ds3_shaders.dslib` + `shadercache_dksh.bin`.
+3. Renderer: Dead Space 3 is a later Visceral engine than Dead Space 2 (deferred lighting, more post-processing); the
+   ring reader and renderer are game-neutral, so start with ds2-nx's notes on clears, resolves and shadows.
+4. CPU: profile with the stack sampler before optimizing; then `LOCALREGS=1` with its check build, VP6 through FFmpeg
+   (dantes-inferno-nx's `dante_video.cpp` and sdk-patches/0009), the audio compressor bypass and EA thread priority
+   hooks once found.
+
+## Log
+
+- 2026-10-23: repository created from dantes-inferno-nx 1.1.0 (tools, SDK patches, glue) and ds2-nx 1.1.0 (disc swap,
+  STFS reader, guest clock patch), with gears2-nx's `match_funcs.py` / `fuzzy_find.py`. Disc 1 (Russia) and TU1 read
+  from the user's files; codegen with 0 traps left; names from Dead Space 2. Second codegen issue (gotos into an
+  overlapping function) fixed in `patch_branch_traps.py`; first NRO links. Copied to the console with disc 1.

@@ -1,0 +1,56 @@
+# Установка ds3-nx (Dead Space 3 для Nintendo Switch)
+
+ds3-nx — нативный порт Dead Space 3 (Xbox 360) для Switch в виде homebrew-программы. **Порт в разработке и пока не
+играбелен.** Готовых файлов не распространяется: код игры, шейдеры и программа собираются у вас на компьютере **из
+вашей собственной копии** (два диска Xbox 360 и Title Update 1).
+
+## Что понадобится
+
+| Что | Подробности |
+| --- | --- |
+| Nintendo Switch | С кастомной прошивкой **Atmosphère** и Homebrew Menu |
+| Карта microSD | Свободно **~16 ГБ**, exFAT или FAT32 (самый большой файл игры 3,8 ГБ) |
+| Образы ваших дисков | Dead Space 3 для Xbox 360, диск 1 и диск 2: `.iso` или `.7z` с ISO внутри. Нужен образ диска, а не установка игры на жёсткий диск Xbox |
+| Title Update 1 | Пакет из `Content/0000000000000000/4541099D/000B0000/` с вашей Xbox; можно папку или `.zip` со всеми четырьмя пакетами — скрипт сам выберет тот, что подходит к диску |
+| Компьютер | **macOS** (проверено) или Linux (не проверялось), ~15 ГБ свободного места, интернет |
+
+Проверено с изданием **Russia** (Media ID диска 1: **4DC6CE0C**). Другие издания скрипт пробует с предупреждением.
+
+## Шаг 1. Инструменты (один раз)
+
+1. **Инструменты Xcode:** `xcode-select --install`.
+2. **Homebrew** (https://brew.sh), затем `brew install cmake ninja python git sevenzip`.
+3. **devkitPro:** установщик со страницы https://github.com/devkitPro/pacman/releases, затем
+   `sudo dkp-pacman -S switch-dev deko3d`.
+4. **Vulkan SDK** (https://vulkan.lunarg.com): нужны `dxc` и `spirv-val` для шейдеров.
+
+## Шаг 2. Подготовить файлы игры
+
+```
+git clone --recursive https://github.com/VasilkovND/ds3-nx
+cd ds3-nx
+python3 ds3/tools/stage_sd.py --disc1 "<диск 1>" --disc2 "<диск 2>" --tu "<Title Update 1>" -o sd/ds3-nx
+```
+
+Скрипт проверит диски и обновление и распакует их в `sd/ds3-nx/` (`tu/`, `disc1/`, `disc2/`). Из `.7z` он читает
+образ напрямую, без распаковки ISO на диск компьютера (несколько минут на диск).
+
+## Шаг 3. Собрать программу
+
+```
+ds3/tools/build_mac.sh sd/ds3-nx/tu
+```
+
+Первая сборка: ~5 минут на генерацию кода и 15–20 минут на компиляцию. Результат: `ds3/out/sw/ds3.nro`.
+
+## Шаг 4. Карта памяти
+
+Скопируйте на карту `sdmc:/switch/ds3-nx/`: `ds3/out/sw/ds3.nro` под именем `ds3-nx.nro` и папки `tu/`, `disc1/`,
+`disc2/` из `sd/ds3-nx/`.
+
+## Запуск
+
+Зажмите **R** и запустите любую игру → откроется Homebrew Menu → **Dead Space 3**. Из альбома (режим апплета) памяти не
+хватит. Логи — в `sdmc:/switch/ds3-nx/logs/`. При первом запуске программа сохраняет шейдеры игры в `shaders_dump/`:
+скопируйте эту папку в `ds3/out/shaders_dump/` на компьютере и запустите `ds3/tools/shaders.sh` (а затем снова
+`build_mac.sh`), чтобы получить `ds3_shaders.dslib` и `shadercache_dksh.bin`.
