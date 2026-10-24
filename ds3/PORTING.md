@@ -22,7 +22,7 @@ family and EA libraries) and dantes-inferno-nx's `dante/PORTING.md` (the from-sc
 | Performance: 540p / 720p options menu (ZL + ZR + Minus), handheld GPU profile 460.8 MHz, audio thread priorities | done: close to 30 fps at 540p on stock clocks |
 | Disc 2 (`stage_sd.py --disc2`), the swap at chapter 5 | not tested yet (needs the user's Disc 2) |
 | Docked mode | not tested yet |
-| 1.0.0 | build 32 |
+| 1.0.0 | build 34 (real occlusion queries) |
 
 ## What is known about the game
 
@@ -348,3 +348,17 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   count, the SDK's rule), in case some lamp's visibility comes from one. Release 1.0.0: the ZL + ZR debug shortcuts off by
   default (`ds3_atajos_depuracion` in `ds3.toml`; the telemetry already needed `telemetria.flag`), `LOCALREGS=1` the
   default.
+- Run 27 (build 32): the fires are gone from behind the rock, but the blizzard broke again (distant rocks show
+  through it), and the fights dropped to 23 fps. The blizzard: the same glow shaders (VS n992 / PS n911) draw the
+  storm's haze, a large bluish-white card ~48 units away, which build 32's depth test hid behind every nearer rock.
+  The fights: sys-clk had the console at CPU 1785 / GPU 614.4 at start, and from the first seconds on everything ran
+  at the handheld profile's 1020 / 460.8 / 1331.2 (in runs 25 and 26 sys-clk had put its clocks back). Build 33 asks
+  for no profile when the CPU runs above 1020 MHz at start, and logs the draws inside occlusion queries.
+- Run 28 (build 33, stock clocks): the occlusion queries (~3 a frame) measure the lamps and fires (VS n73 / PS n998
+  strips, VS n518 quads with color writes off), a full-screen depth-tested quad (the sky behind the blizzard), the sun
+  shafts (VS n31 / PS n440) and the light volumes (VS n1071 / PS n408): the game sizes its glows and its haze from
+  them, and every one was answered with the fixed "1000 samples visible". Build 34 drops the glow depth test and
+  counts the queries on the GPU (`sdk-patches/0031`, gears2-nx's 0043): the game is answered at once with the count
+  the same query structure got a frame or two earlier, never kept waiting for the GPU (`ds3_oclusion_real`). Fights
+  at stock clocks run 21-27 fps with the CPU at 320-335 % of 400 % (the two audio mixer threads ~47 % each and the
+  XMA decoder ~47 %: 1.4 cores of audio) and the GPU at its 32 ms: the next step there is the mixer's DSP in NEON.
