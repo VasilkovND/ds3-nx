@@ -296,3 +296,8 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   their loops (src/ds3_audio.cpp). The Audio Worker's callback spent 97 % in WaitMultiple's 1 ms sleeps:
   sdk-patches/0030 wakes a sleeping WaitMultiple on any signal (the 1 ms slice stays as the fallback; the objects'
   own waits and signals unchanged).
+- Run 21 (build 26): the sound is right (0 requests without data in almost every window), but 15-20 fps in fights.
+  The audio side went from ~60 % to ~210 % of a core: 0030's global wake-up woke every WaitMultiple waiter on every
+  event signal in the game, and the Audio Worker and the XAudio threads (now at 0x2E) spent their time locking,
+  waking and sleeping again (Audio Worker 2.4 -> 21.7 %, XAudio 7-19 % each, XMA decoder 12 -> 42 %). 0030 is out
+  (build 27); the six audio threads stay raised, which is what fixed the sound.
