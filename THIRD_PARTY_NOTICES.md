@@ -1,22 +1,25 @@
 # Third-party notices
 
-dantes-inferno-nx is built on the work of other projects. Their licenses apply to their code and to the parts of this
-repository derived from it.
+ds3-nx is built on the work of other projects. Their licenses apply to their code and to the parts of this repository
+derived from it.
 
 ## Projects this port is derived from
 
 | Project | Used for | License |
 |---|---|---|
-| [rexglue-sdk-nx](https://github.com/nx-mod/rexglue-sdk-nx) by nx-mod | The SDK submodule (`sdk/`): the Switch fork of ReXGlue, and its Halo 3 port's ring reader, which `dante/src/dante_gpu.cpp` started from (via ds2-nx) | BSD-3-Clause (`sdk/LICENSE`) |
-| [ds2-nx](https://github.com/VasilkovND/ds2-nx) by VasilkovND | The Dead Space 2 port this one follows: `dante/src`, `dante/tools`, `dante/sdk-patches/0001-0006` and `shaders/` started as its files | GPL-3.0 (this repository), BSD-3-Clause (SDK changes), MIT (translator changes) |
-| [Hell's Gate](https://github.com/florinp93/hells-gate-recomp) by florinp93 | The PC port of Dante's Inferno: its codegen manifest, its ReXGlue patch and its generated-code fixes, fetched at build time by `dante/tools/codegen.sh` (not in this repository); `dante/src/dantes_inferno_hooks.h` and `sdk-patches/0007` implement behaviour it found | See that repository (no license file) |
-| [NFSMW-NX](https://github.com/StevensND/nfsmw-nx) by StevensND | The port this repository was forked from: the Horizon (Switch) layer and deko3d renderer in `sdk/` (via `rexglue-sdk-nx`), and the shader tools in `shaders/` | GPL-3.0 (this repository), BSD-3-Clause (SDK changes), MIT (translator changes) |
+| [rexglue-sdk-nx](https://github.com/nx-mod/rexglue-sdk-nx) by nx-mod | The SDK submodule (`sdk/`): the Switch fork of ReXGlue, and its Halo 3 port's ring reader, which `ds3/src/ds3_gpu.cpp` started from (via ds2-nx) | BSD-3-Clause (`sdk/LICENSE`) |
+| [ds2-nx](https://github.com/VasilkovND/ds2-nx) by VasilkovND | The Dead Space 2 port this one follows: `ds3/src`, `ds3/tools` and `shaders/` started as its files | GPL-3.0 (this repository), BSD-3-Clause (SDK changes), MIT (translator changes) |
+| [dantes-inferno-nx](https://github.com/VasilkovND/dantes-inferno-nx) by VasilkovND | The from-scratch codegen (`ds3/tools/codegen.sh`, `patch_branch_traps.py`, `prepare_tree.py`) and `ds3/sdk-patches/0001-0012` | GPL-3.0 (this repository), BSD-3-Clause (SDK changes) |
+| [gears2-nx](https://github.com/VasilkovND/gears2-nx) by VasilkovND | The CPU passes (`patch_local_regs.py`, `patch_stack_access.py`, `patch_inline_calls.py`) and `ds3/sdk-patches/0019`, `0023` (partial submits) and `0031` (real occlusion queries) | GPL-3.0 (this repository), BSD-3-Clause (SDK changes) |
+| [Dead-Space-2-Recomp](https://github.com/bifftannen1/Dead-Space-2-Recomp) by bifftannen1 | Function names matched by body against its PDB-named code (`ds3/tools/match_funcs.py`, `ds3/codegen/names.toml`), and the disc swap `ds3/src/ds3_disc_swap.cpp` adapts (via ds2-nx) | See that repository (no license file) |
+| [Hell's Gate](https://github.com/florinp93/hells-gate-recomp) by florinp93 | The PC port of Dante's Inferno: its ReXGlue patch with codegen fixes, fetched at build time by `ds3/tools/codegen.sh` (not in this repository) | See that repository (no license file) |
+| [NFSMW-NX](https://github.com/StevensND/nfsmw-nx) by StevensND | The Horizon (Switch) layer and deko3d renderer in `sdk/` (via `rexglue-sdk-nx`), and the shader tools in `shaders/` | GPL-3.0 (this repository), BSD-3-Clause (SDK changes), MIT (translator changes) |
 | [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) by Tom Clay, with portions from [Xenia](https://xenia.jp) (Ben Vanik and the Xenia contributors) | `sdk/`: Xbox 360 kernel and runtime, GPU command processing, Switch layer | BSD-3-Clause (`sdk/LICENSE`) |
 | [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) by hedge-dev and contributors | `shaders/XenosRecomp`: Xenos microcode to HLSL translator | MIT (`shaders/LICENSE.md`) |
 
-The Horizon (Switch) layer and renderer in `sdk/` are under the SDK's BSD-3-Clause license, and the changes in
-`shaders/XenosRecomp` under MIT, so they can be reused by other ports. The rest of this repository is GPL-3.0
-(`LICENSE`).
+The Horizon (Switch) layer and renderer in `sdk/` and the patches to it in `ds3/sdk-patches/` are under the SDK's
+BSD-3-Clause license, and the changes in `shaders/XenosRecomp` under MIT, so they can be reused by other ports. The
+rest of this repository is GPL-3.0 (`LICENSE`).
 
 ## Libraries
 
@@ -55,5 +58,5 @@ either library is in this repository and the SDK (see [README.md](README.md)).
 
 ## Trademarks
 
-Dante's Inferno is a trademark of Electronic Arts Inc. Nintendo Switch is a trademark of Nintendo.
+Dead Space is a trademark of Electronic Arts Inc. Nintendo Switch is a trademark of Nintendo.
 Xbox 360 is a trademark of Microsoft. This project is not affiliated with or endorsed by any of them.

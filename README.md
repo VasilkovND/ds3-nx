@@ -106,6 +106,9 @@ license, and the shader translator changes under MIT.
 
 - **[bifftannen1](https://github.com/bifftannen1/Dead-Space-2-Recomp)**: Dead-Space-2-Recomp, whose PDB-named code
   gave this port its function names (matched by body) and whose disc swap it adapts.
+- **[ds2-nx](https://github.com/VasilkovND/ds2-nx), [dantes-inferno-nx](https://github.com/VasilkovND/dantes-inferno-nx)
+  and [gears2-nx](https://github.com/VasilkovND/gears2-nx)**: the earlier ports whose code, CPU passes and SDK patches
+  (partial submits, real occlusion queries) this one reuses.
 - **[florinp93](https://github.com/florinp93/hells-gate-recomp)**: Hell's Gate, the PC port of Dante's Inferno, whose
   ReXGlue codegen fixes are fetched at build time.
 - **[nx-mod](https://github.com/nx-mod/rexglue-sdk-nx)**: rexglue-sdk-nx, the Switch fork of the SDK, and its Halo 3
