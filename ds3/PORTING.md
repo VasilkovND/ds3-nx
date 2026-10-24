@@ -362,3 +362,7 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   the same query structure got a frame or two earlier, never kept waiting for the GPU (`ds3_oclusion_real`). Fights
   at stock clocks run 21-27 fps with the CPU at 320-335 % of 400 % (the two audio mixer threads ~47 % each and the
   XMA decoder ~47 %: 1.4 cores of audio) and the GPU at its 32 ms: the next step there is the mixer's DSP in NEON.
+- Run 29 (build 34, stock clocks, 540p): the user reports everything right: the blizzard hides the distant rocks
+  again, the fires no longer glow through rock. 83 % of the occlusion queries are answered with a GPU count (the rest,
+  the first time a structure is used, with the fixed one), 0 without room; 29.8 fps on average over the gameplay
+  intervals (the lowest 23.4, a fight). Released as 1.0.0.
