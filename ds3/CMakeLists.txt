@@ -56,7 +56,8 @@ function(ds3_add_hook source)
     set(DS3_GAME_HOOKS ${DS3_GAME_HOOKS} PARENT_SCOPE)
     message(STATUS "ds3: ${source} on")
 endfunction()
-ds3_add_hook(src/ds3_shader_dump.cpp ds3_D3DDevice_CreateVertexShader ds3_D3DDevice_CreatePixelShader)
+ds3_add_hook(src/ds3_shader_dump.cpp ds3_D3DDevice_CreateVertexShader ds3_D3DDevice_CreatePixelShader
+             ds3_XGRegisterVertexShader ds3_XGRegisterPixelShader)
 ds3_add_hook(src/ds3_audio.cpp rw__audio__core__MixWithGain rw__audio__core__CopyWithGain)
 ds3_setup_game_module(ds3 ds3_deadspace_game_f ${DS3_GAME_HOOKS})
 

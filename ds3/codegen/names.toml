@@ -13,6 +13,13 @@ name = "ds3_D3DDevice_CreateVertexShader"
 [entrypoint.functions.0x88A2D728]
 name = "ds3_D3DDevice_CreatePixelShader"
 
+# XDK: shaders built in place, with no Create*Shader (src/ds3_shader_dump.cpp). DS2: 0x82220470 / 0x82220188.
+[entrypoint.functions.0x88A2D818]
+name = "ds3_XGRegisterVertexShader"
+
+[entrypoint.functions.0x88A2CEF0]
+name = "ds3_XGRegisterPixelShader"
+
 # RenderWare Audio's mixer leaf loops (src/ds3_audio.cpp: NEON versions), byte for byte Dead Space 2's.
 [entrypoint.functions.0x886BE8E8]
 name = "rw__audio__core__MixWithGain"
@@ -973,3 +980,17 @@ name = "unresolved_target_88C4E438"
 
 [entrypoint.functions.0x88C5420C]
 name = "unresolved_target_88C5420C"
+
+# Called through pointers at run time (run 5: "Call to invalid or unregistered function"), not found by the gap scan.
+[entrypoint.functions.0x8884A4D0]
+name = "indirect_8884A4D0"
+
+[entrypoint.functions.0x8884A4E0]
+name = "indirect_8884A4E0"
+
+[entrypoint.functions.0x88C63608]
+name = "indirect_88C63608"
+
+[entrypoint.functions.0x88C63620]
+name = "indirect_88C63620"
+

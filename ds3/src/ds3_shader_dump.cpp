@@ -33,9 +33,11 @@
 #include <atomic>
 #include <cstdio>
 #include <filesystem>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 REXCVAR_DEFINE_BOOL(ds3_shader_dump, false, "DS3",
                     "Write every shader container the game creates to shaders_dump/ next to the executable.");
@@ -51,6 +53,8 @@ std::atomic<uint32_t> g_rejected{0};
 // `missing`: the library has no entry for it, or there is no library at all. Those are always written: without
 // ds3_shaders.dslib next to the NRO the first start dumps the game's whole set (it creates every shader at startup),
 // which is how a player makes the library from their own copy (INSTALL.md). The rest only with ds3_shader_dump.
+void DumpBytes(const uint8_t* data, uint64_t size, uint32_t flags, const char* stage, bool missing);
+
 void Dump(uint8_t* base, uint32_t address, const char* stage, bool missing) {
   if (!address || !(missing || REXCVAR_GET(ds3_shader_dump))) return;
   const uint32_t flags = REX_LOAD_U32(address);
@@ -64,7 +68,11 @@ void Dump(uint8_t* base, uint32_t address, const char* stage, bool missing) {
     }
     return;
   }
-  const uint8_t* data = REX_RAW_ADDR(address);
+  DumpBytes(REX_RAW_ADDR(address), size, flags, stage, missing);
+}
+
+void DumpBytes(const uint8_t* data, uint64_t size, uint32_t flags, const char* stage, bool missing) {
+  if (!(missing || REXCVAR_GET(ds3_shader_dump))) return;
   const uint64_t hash = XXH3_64bits(data, size);
 
   std::lock_guard<std::mutex> lock(g_mutex);
@@ -109,6 +117,43 @@ void Registrar(PPCContext& ctx, uint32_t container, const rex::x360::EntradaShad
   }
 }
 
+// XGRegisterVertexShader / XGRegisterPixelShader(object, microcode): a shader built in place, as a resource loaded
+// from the disc already holds it, with no Create*Shader call: the D3D object (872 bytes for a VS, 40 for a PS),
+// the container's virtual part right after it, the microcode (the physical part) somewhere else, in r4. Dead Space 3
+// draws a few things with such shaders (three VS the first runs could not identify). The two parts are put together
+// as one container, which is what the library and XenosRecomp read.
+void RegistrarEnSitio(PPCContext& ctx, uint8_t* base, const char* stage, uint32_t object_size,
+                      void (*original)(PPCContext&, uint8_t*)) {
+  const uint32_t object = ctx.r3.u32;
+  const uint32_t microcode = ctx.r4.u32;
+  const uint32_t header = object + object_size;
+  const uint32_t flags = REX_LOAD_U32(header);
+  const uint32_t virtual_size = REX_LOAD_U32(header + 4);
+  const uint32_t physical_size = REX_LOAD_U32(header + 8);
+  const rex::x360::EntradaShader* entrada = nullptr;
+  std::vector<uint8_t> container;
+  if ((flags & 0xFFFF0000u) == 0x102A0000u && virtual_size >= 36 && virtual_size < (1u << 20) &&
+      physical_size < (1u << 20) && microcode) {
+    container.resize(size_t(virtual_size) + physical_size);
+    std::memcpy(container.data(), REX_RAW_ADDR(header), virtual_size);
+    std::memcpy(container.data() + virtual_size, REX_RAW_ADDR(microcode), physical_size);
+    auto& biblioteca = ds3::shaders::Global();
+    if (biblioteca.cargada()) entrada = biblioteca.PorContenedor({container.data(), container.size()});
+    DumpBytes(container.data(), container.size(), flags, stage, !entrada);
+  } else {
+    static std::atomic<int> avisos{0};
+    if (avisos.fetch_add(1) < 8) {
+      REXLOG_WARN("[shaders] XGRegister {} object {:08X} microcode {:08X}: no container after the object "
+                  "({:08X} {:08X} {:08X} {:08X})", stage, object, microcode, flags, virtual_size, physical_size,
+                  REX_LOAD_U32(header + 12));
+    }
+  }
+  original(ctx, base);
+  if (entrada && ds3::shaders::Global().cargada()) {
+    ds3::shaders::Global().RegistrarObjeto(rex::system::kernel_memory(), object, entrada);
+  }
+}
+
 }  // namespace
 
 REX_EXTERN(__imp__ds3_D3DDevice_CreateVertexShader);
@@ -128,3 +173,10 @@ REX_EXTERN(ds3_D3DDevice_CreatePixelShader) {
   __imp__ds3_D3DDevice_CreatePixelShader(ctx, base);
   Registrar(ctx, container, entrada);
 }
+
+REX_EXTERN(__imp__ds3_XGRegisterVertexShader);
+REX_EXTERN(ds3_XGRegisterVertexShader) { RegistrarEnSitio(ctx, base, "vs", 872, __imp__ds3_XGRegisterVertexShader); }
+
+REX_EXTERN(__imp__ds3_XGRegisterPixelShader);
+REX_EXTERN(ds3_XGRegisterPixelShader) { RegistrarEnSitio(ctx, base, "ps", 40, __imp__ds3_XGRegisterPixelShader); }
+

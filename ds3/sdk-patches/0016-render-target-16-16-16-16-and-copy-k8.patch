@@ -1,0 +1,29 @@
+--- a/src/x360/deko/destinos.cpp
++++ b/src/x360/deko/destinos.cpp
+@@ -793,7 +793,11 @@
+       host = DkImageFormat_RGBA16_Float;
+       return true;
+     case 6:   // k_16_16_FLOAT
++    case 4:   // k_16_16 (Xenos: fixed point, -32..32; a half float holds that range)
+       host = DkImageFormat_RG16_Float;
++      return true;
++    case 5:   // k_16_16_16_16 (the same, four channels: Gears of War 2's velocity and light targets)
++      host = DkImageFormat_RGBA16_Float;
+       return true;
+     case 14:  // k_32_FLOAT
+       host = DkImageFormat_R32_Float;
+@@ -820,9 +824,14 @@
+     case 54:  // k_2_10_10_10_AS_16_16_16_16
+       host = DkImageFormat_RGB10A2_Unorm;
+       return true;
++    case 2:   // k_8 (the target's first channel: Dead Space 3 resolves single-channel masks)
++      host = DkImageFormat_R8_Unorm;
++      return true;
+     case 31:  // k_16_16_FLOAT
++    case 25:  // k_16_16 (resolved from a k_16_16 target)
+       host = DkImageFormat_RG16_Float;
+       return true;
++    case 26:  // k_16_16_16_16
+     case 32:  // k_16_16_16_16_FLOAT
+       host = DkImageFormat_RGBA16_Float;
+       return true;

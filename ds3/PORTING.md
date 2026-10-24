@@ -137,4 +137,11 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
 - Shaders: 1,179 translated after one fix: the translator passes `NAME_InvTamano` to `getWeights2D` too (103 shadow
   filter shaders), and `shader_common.h` gets that overload. 10,083 DKSH variants precompiled. Black screen in run 4
   was this (no library: every draw skipped, "VS not identified") and the stop above.
+- Run 5 (overclocked): menus right at ~30 fps; in game some textures missing (ground), the player half transparent,
+  fights down to 10-14 fps (CPU 288 % of 300 %, GPU 21-28 ms a frame). The log: 3 % of draws rejected by the renderer
+  for formats it lacked (render target k_16_16_16_16, copies to k_8: `sdk-patches/0016`, the first from gears2-nx's
+  0010), 8 % skipped for three VS the library did not have (created in place with XGRegisterVertexShader /
+  XGRegisterPixelShader, not Create*Shader: now hooked too, the container rebuilt from the object and its microcode),
+  4 more indirect calls to functions not generated (named in `names.toml`). Debug shortcuts (ZL + ZR) on by default
+  (`ds3_atajos_depuracion`) for the stack sampler.
 

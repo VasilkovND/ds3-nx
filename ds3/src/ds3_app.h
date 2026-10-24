@@ -31,9 +31,13 @@
 #include "ds3_gpu.h"
 
 #if defined(__SWITCH__)
-// The SDK's debug shortcuts (ZL + ZR + Down / Left / Right / R ...: captures, frame dumps, draw-skipping modes, stack
-// sampling): on while the port is being brought up (ds3.toml can turn them off); ZL + ZR + Up, the FPS counter.
+// The SDK's debug shortcuts (ZL + ZR held: Down capture, Left frame dump and draw trace, Right draw-skipping modes,
+// R CPU stack sampler, L GPU lap; Up the FPS counter): the SDK has them off (a release build); on while the port is
+// being brought up.
 REXCVAR_DECLARE(bool, switch_atajos_depuracion);
+REXCVAR_DEFINE_BOOL(ds3_atajos_depuracion, true, "DS3",
+                    "Atajos de depuracion con ZL+ZR (captura, volcado de fotograma, modos de omision, muestreo de "
+                    "pilas con R). false = solo el contador de FPS");
 #endif
 
 REXCVAR_DEFINE_STRING(ds3_disc1, "", "DS3", "Carpeta del disco 1 extraido. Vacio: disc1/ junto al ejecutable.");
@@ -61,7 +65,12 @@ class Ds3App : public rex::ReXApp {
     paths.game_data_root = folder / "tu";
   }
 
-  void OnPostInitLogging() override { ds3::cpu::InformarSistema(); }
+  void OnPostInitLogging() override {
+#if defined(__SWITCH__)
+    REXCVAR_SET(switch_atajos_depuracion, REXCVAR_GET(ds3_atajos_depuracion));
+#endif
+    ds3::cpu::InformarSistema();
+  }
 
   // After Runtime::Setup (the VFS exists), before LoadXexImage.
   void OnLoadXexImage(std::string& xex_image) override {
