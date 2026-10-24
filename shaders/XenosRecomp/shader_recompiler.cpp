@@ -395,6 +395,24 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
         SCALAR_CONSTANT_1
     };
 
+    /*
+     * The vector and the scalar operation of one ALU instruction read their sources before either writes (the
+     * Xenos co-issues them). Here the vector line is written first: when it writes the register the scalar reads, the
+     * scalar would get the new value. That register is copied before the vector line and the scalar reads the copy.
+     * Dead Space 3's lamp visibility (PS n645): `r0.y = r1.w; ps = r0.y - r0.w;` started its 7x7 depth taps at the
+     * wrong row, and fire glows showed through rock.
+     */
+    std::string escalarGuardado;
+    const bool escalarConstante = instr.scalarOpcode == AluScalarOpcode::Mulsc0 ||
+                                  instr.scalarOpcode == AluScalarOpcode::Mulsc1 ||
+                                  instr.scalarOpcode == AluScalarOpcode::Addsc0 ||
+                                  instr.scalarOpcode == AluScalarOpcode::Addsc1 ||
+                                  instr.scalarOpcode == AluScalarOpcode::Subsc0 ||
+                                  instr.scalarOpcode == AluScalarOpcode::Subsc1;
+    const uint32_t registroEscalar = escalarConstante
+        ? ((uint32_t(instr.scalarOpcode) & 1) | (instr.src3Select << 1) | (instr.src3Swizzle & 0x3C))
+        : (instr.src3Select ? (instr.src3Register & 0x3F) : 0xFFFFFFFFu);
+
     auto op = [&](size_t operand)
         {
             size_t reg = 0;
@@ -463,7 +481,10 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
 
             if (select)
             {
-                regFormatted = fmt::format("r{}", reg);
+                const bool escalar = operand == SCALAR_0 || operand == SCALAR_1 || operand == SCALAR_CONSTANT_1;
+                regFormatted = escalar && !escalarGuardado.empty() && reg == instr.vectorDest
+                    ? escalarGuardado
+                    : fmt::format("r{}", reg);
             }
             else
             {
@@ -666,6 +687,14 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
     uint32_t vectorWriteMask = instr.vectorWriteMask;
     if (instr.exportData)
         vectorWriteMask &= ~instr.scalarWriteMask;
+
+    if (instr.scalarOpcode != AluScalarOpcode::RetainPrev && vectorWriteMask != 0 && !instr.exportData &&
+        registroEscalar == instr.vectorDest)
+    {
+        escalarGuardado = fmt::format("rEscalar{}", contadorEscalarGuardado++);
+        indent();
+        println("float4 {} = r{};", escalarGuardado, instr.vectorDest);
+    }
 
     if (vectorWriteMask != 0)
     {

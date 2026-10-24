@@ -307,3 +307,12 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   games use, not an overclock) through the SDK's switch_apm.cpp (`ds3_gpu_portatil_mhz`, 460; 0 = untouched).
   Left on the CPU in fights: the audio (XMA decoder ~52 % of a core, FFmpeg already NEON; the two busiest mixers ~50 %
   each), the main thread ~77 %, the ring thread ~52 %.
+- Run 23 (build 28): GPU 460.8 MHz with the memory at 1331.2, 30 fps nearly everywhere at 540p, no audio gaps. Two
+  artifacts dumped in the prologue: far terrain and rocks flat black instead of hidden by the blizzard, and fire
+  glows through rock. The glows draw without depth; the game sizes them from its lamp visibility pass (PS n645, 64x8,
+  read back to the CPU every frame: that works), and PS n645 sampled the depth around the wrong row:
+  `r1.zw = ...; r0.y = r1.w; ps = r0.y - r0.w;`. A Xenos ALU instruction co-issues a vector and a scalar operation
+  that both read their sources before either writes; the translator wrote the vector line first, and the scalar
+  read the new value. Now the register is copied before the vector line when the scalar reads the register the
+  vector writes (552 of 1,179 shaders have such an instruction, some harmless; among them the terrain and rock
+  materials n489, n1086, n959, the composite n245, the sun shadow mask n155 and the blizzard sheets' VS n521).

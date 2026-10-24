@@ -167,6 +167,10 @@ struct ShaderRecompiler : StringBuffer
      */
     int predGarantizado_ = -1;
 
+    // The copies of a register a scalar operation reads before its co-issued vector operation writes it
+    // (recompile(const AluInstruction&)): numbered per shader.
+    uint32_t contadorEscalarGuardado = 0;
+
     void abrirPredicado(bool condicion)
     {
         const int quiero = condicion ? 1 : 0;
