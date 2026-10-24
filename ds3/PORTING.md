@@ -324,3 +324,13 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   not read from their vertices. The glows: the 64x8 lamp visibility read back to the CPU says those fires are visible
   (0.85-1.0), so the visibility test itself passes them; to check whether 540p is involved (the CPU computes each
   lamp's screen position for that test), the same spot is to be tried at 720p.
+- Run 25 (build 30; dumps at 540p and 720p alike, so not a 540p matter): the clear-color log settles the blizzard.
+  The material target (c0 176) gets two clears every frame: a color clear to black, then a depth-only clear (msaa
+  2x, half pitch) at z 176, over the color's EDRAM, whose vertices carry the fog color 0.602 0.617 0.664: on the
+  console the depth write leaves those bytes in the color target (Direct3D's fast path). `EmulateClear` filled the
+  color image "cleared by the depth over it" with 0 (Dead Space 2's light buffer case); it now takes the clear's own
+  color, and the sky behind the snow is the fog color. The glows: right before each lamp visibility pass the 64x8
+  32_FLOAT target is cleared by Direct3D (rect, single-sampled), which the emulation skipped ("no VS": only 8-bit
+  targets were taken, a Dead Space 2 rule against a same-shaped draw of game data); lamps not tested in a frame kept
+  another lamp's old visible value, which the CPU reads back. Dead Space 3's clear VS (recognized by its microcode,
+  its color in its vertices) now makes any single-sampled rect a clear, whatever the format (build 31).

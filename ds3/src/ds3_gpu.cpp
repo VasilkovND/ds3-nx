@@ -1209,6 +1209,13 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
       std::memcpy(&v, &registers_[0x4400 + j], 4);
       rect_clear = v >= 0.0f && v <= 1.0f;
     }
+    // Dead Space 3's own clear VS (its color in its vertices, IsClearVertexShader) says it is a clear whatever the
+    // target's format: the 64x8 32_FLOAT lamp visibility target is cleared that way before each visibility pass. Left
+    // out, the lamps not tested in a frame kept another lamp's old "visible" and fires glowed through rock.
+    if (!rect_clear && !msaa && (initiator & 0x3F) == 8 && (initiator >> 16) >= 3 && (initiator >> 16) % 3 == 0 &&
+        Register(g::XE_GPU_REG_RB_COLOR_MASK) == 0xFFFF && IsClearVertexShader()) {
+      rect_clear = true;
+    }
     if (!vs_ && ((msaa && (Register(g::XE_GPU_REG_PA_SC_WINDOW_SCISSOR_BR) & 0x3FFF) >= 0x2000) || rect_clear)) {
       if (draw_tracing_) DrawTraceLine(true, "Direct3D clear, emulated");
       EmulateClear(msaa);
@@ -1379,10 +1386,14 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   // 30052003 00001200 C4000000) fetches each vertex from fetch constant 0.0, stride 7 dwords: the position
   // (32_32_32_FLOAT) and at dword 3 the color (32_32_32_32_FLOAT, into r0, which PS n198 outputs). false if the VS
   // is not that one or the fetch constant does not point at vertices.
+  bool IsClearVertexShader() const {
+    const std::vector<uint32_t>& m = vs_microcode_;
+    return m.size() == 27 && m[0] == 0x30052003 && m[9] == 0x30081000 && (m[11] & 0xFF) == 7 &&
+           m[12] == 0x00080000 && ((m[13] >> 16) & 0x3F) == 38 && ((m[14] >> 8) & 0x7FFFFF) == 3;
+  }
   bool ClearColorFromVertices(float color[4]) {
     const std::vector<uint32_t>& m = vs_microcode_;
-    if (m.size() != 27 || m[0] != 0x30052003 || m[9] != 0x30081000 || (m[11] & 0xFF) != 7 || m[12] != 0x00080000 ||
-        ((m[13] >> 16) & 0x3F) != 38 || ((m[14] >> 8) & 0x7FFFFF) != 3) {
+    if (!IsClearVertexShader()) {
       // Which clear shaders do not carry their color this way (their first fetch words), once each.
       const uint64_t firma = m.size() > 14 ? (uint64_t(m[9]) << 32) | m[11] : m.size();
       if (clear_vs_unread_.size() < 8 && clear_vs_unread_.insert(firma).second) {
@@ -1471,8 +1482,8 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     // shader writes, the pixel shader's c0 (RGBA8 for the renderer's clear).
     uint32_t color = 0;
     float vertex_color[4];
-    const bool target_8bit = ((base.rb_color_info[0] >> 16) & 0xF) <= 1;
-    if (target_8bit && ClearColorFromVertices(vertex_color)) {
+    // Any format: the renderer's clear takes the four channels as 8-bit fractions (0 and 1 exact for float targets).
+    if (ClearColorFromVertices(vertex_color)) {
       // Dead Space 3's Direct3D clear: its PS (n198) outputs the interpolated vertex color, and the VS fetches it
       // from the clear's own vertices; PS c0 holds whatever the game left there (the material target's clear came
       // out black instead of the blizzard's fog color: a black sky behind the snow).
@@ -1521,10 +1532,14 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
       if (z_base == c0_base && (mask & 0xF)) {
         rex::x360::RegistrosCopia c = base;
         c.rb_copy_control = 0u | (1u << 8) | kNullCommand;
-        c.rb_color_clear = 0;
+        // Dead Space 3 clears its material target this way (a color clear to black, then this depth-only clear over
+        // its EDRAM), and the bytes the console's depth write leaves there are the clear's color: the blizzard's fog
+        // color (0.60 0.62 0.66) where the sky shows. As 0 the sky behind the snow was black.
+        c.rb_color_clear = color;
         c.rb_color_clear_lo = 0;
         destinos_->Copiar(c);
         what += fmt::format(" c0={:03X} (by the depth over it)", c0_base);
+        if (color) what += fmt::format("={:08X}", color);
       }
     }
     ++clears_;
