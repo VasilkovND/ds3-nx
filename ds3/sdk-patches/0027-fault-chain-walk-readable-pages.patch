@@ -1,0 +1,24 @@
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -584,11 +584,17 @@
+       // previous frame's top (the 360's prologue: stw r12,-8(r1) before stwu). Stops at the first unmapped frame.
+       std::string chain;
+       uint32_t sp = c->r1.u32;
+-      for (int i = 0; i < 48 && sp; ++i) {
+-        auto* sp_heap = LookupHeap(sp);
+-        if (!sp_heap) break;
++      // Readable means mapped and committed: a heap also holds the reserved pages above a stack's top, and reading
++      // one faulted inside this handler over and over (run 18: the game froze instead of crashing).
++      auto legible = [this](uint32_t direccion) {
++        BaseHeap* heap = LookupHeap(direccion);
++        uint32_t proteccion = 0;
++        return heap && heap->QueryProtect(direccion, &proteccion) && (proteccion & kMemoryProtectRead);
++      };
++      for (int i = 0; i < 48 && sp; ++i) {
++        if (!legible(sp)) break;
+         const uint32_t prev = rex::memory::load_and_swap<uint32_t>(TranslateVirtual(sp));
+-        if (prev <= sp || !LookupHeap(prev - 8)) break;
++        if (prev <= sp || !legible(prev - 8)) break;
+         const uint32_t saved_lr = rex::memory::load_and_swap<uint32_t>(TranslateVirtual(prev - 8));
+         chain += fmt::format(" {:08X}", saved_lr);
+         sp = prev;

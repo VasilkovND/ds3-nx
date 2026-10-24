@@ -30,6 +30,7 @@
 #include "ds3_cpu.h"
 #include "ds3_disc_swap.h"
 #include "ds3_gpu.h"
+#include "ds3_menu.h"
 
 #if defined(__SWITCH__)
 // The SDK's debug shortcuts (ZL + ZR held: Down capture, Left frame dump and draw trace, Right draw-skipping modes,
@@ -97,6 +98,7 @@ class Ds3App : public rex::ReXApp {
 
   void OnPreLaunchModule() override {
     ds3::cpu::Configurar();
+    ds3::menu::Instalar(*runtime());
     try {
       ds3::disc_swap::RegisterImport(*runtime());
     } catch (const std::exception& error) {

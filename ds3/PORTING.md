@@ -264,3 +264,17 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
     queue at `audio_switch_tramas_en_cola`; 0025 takes the event lock out of the mixers' per-tick Reset (9.8 % of
     their samples waited there) and wakes waiters after the unlock; 0026 logs frames over 45 ms. The 24 shader
     variants compiled live in run 17 are in the cache now (10,210).
+- Run 18 (build 23) froze after 6 minutes: an RenderWare Audio thread read freed memory (0x963617D4, in the command
+  interpreter sub_88981368, which calls 0x886C2E40 / 0x886C0178) and the fault handler's call-chain walk then
+  faulted on itself past the stack top, over and over, so the game hung instead of crashing; a 27 s stall earlier in
+  the run too. The only changes of build 23 that touch the audio threads were 0024 (a deeper queue: the mixer ran
+  further ahead) and 0025 (event wake-ups): both are out again; the stutter comes back to build 21's level. 0027:
+  the walk stops at the first page that is not readable.
+- Stock clocks (build 24): the scene resolution is now a choice. 0x8895BAE0 writes the scene size the renderer reads
+  (u16 0x890B1378 / 0x890B137C: 1152x720 in HD, 1024x768 in SD, so the engine renders other sizes); the hook
+  (`src/ds3_resolution.cpp`) puts 864x540 there when 540p is chosen (the same 1.6 shape, stretched as 1152x720 is).
+  The options menu (`src/ds3_menu.cpp`, ZL + ZR + Minus) saves the choice in ds3_resolucion.txt; it applies at the
+  next start. Without one: 720p from a 1.5 GHz CPU up, else 540p. The menu is painted by the presenter
+  (`sdk-patches/0028`, no ImGui, which moves presentation to the UI thread) and the game sees the controller idle
+  while it is open. Also: Direct3D's GPU wait step (0x88A20950) yields, then sleeps 100 us, instead of spinning a
+  core (gears2-nx).
