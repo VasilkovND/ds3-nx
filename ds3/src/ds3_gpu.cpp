@@ -750,7 +750,17 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
             draw_tracing_ = true;
             draw_trace_n_ = 0;
             draw_trace_cap_ = 3000;
-            REXLOG_INFO("[draws] full trace of the next frame (ZL + ZR + Left)");
+            // And the raw bytes of every texture that frame samples (DumpTexture).
+            {
+              std::error_code ec;
+              const auto carpeta = rex::filesystem::GetExecutableFolder();
+              uint32_t n = 0;
+              while (std::filesystem::exists(carpeta / fmt::format("texturas_{:02}", n), ec)) ++n;
+              tex_dump_dir_ = carpeta / fmt::format("texturas_{:02}", n);
+              std::filesystem::create_directories(tex_dump_dir_, ec);
+              tex_dumped_.clear();
+            }
+            REXLOG_INFO("[draws] full trace of the next frame (ZL + ZR + Left), its textures to {}", tex_dump_dir_.string());
           }
           AutomaticCollection();
           if (REXCVAR_GET(switch_captura_pedida)) {
@@ -1620,6 +1630,48 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
                   reg, ps_->samplers[i].tipo, f[1] & 0xFFFFF000u, f[1] & 0x3F, (f[2] & 0x1FFF) + 1,
                   ((f[2] >> 13) & 0x1FFF) + 1, (f[5] >> 9) & 0x3, (f[3] >> 1) & 0xFFF, (f[0] >> 2) & 0xFF,
                   (f[0] >> 31) & 1, f[0] & 0x3, int32_t(f[3] << 13) >> 26);
+      DumpTexture(f);
+    }
+  }
+
+  // The raw guest bytes of a texture the traced frame samples, once each: <base>_<w>x<h>_f<format>.bin holds the base
+  // level as it is in memory (tiled or linear, as the fetch constant says), .mips the mip chain at its own address, and
+  // .txt the six fetch constant words. Decoded on the PC: what the game has in memory against what the frame shows
+  // (Dead Space 3: faces without eyes or mouths, bare surfaces).
+  void DumpTexture(const uint32_t* f) {
+    if (tex_dump_dir_.empty() || tex_dumped_.size() >= 400) return;
+    const uint32_t base = f[1] & 0x1FFFF000u;
+    const uint32_t formato = f[1] & 0x3F;
+    if (!base || !tex_dumped_.insert(uint64_t(base) << 8 | formato).second) return;
+    uint32_t bloque = 1, bytes = 4;
+    switch (formato) {
+      case 18: bloque = 4; bytes = 8; break;   // DXT1
+      case 19: case 20: case 49: bloque = 4; bytes = 16; break;  // DXT2_3, DXT4_5, DXN
+      case 59: bloque = 4; bytes = 8; break;   // DXT5A
+      case 2: bytes = 1; break;
+      case 4: case 10: case 24: bytes = 2; break;
+      case 6: case 7: break;
+      default: return;
+    }
+    const uint32_t alto = ((f[2] >> 13) & 0x1FFF) + 1;
+    const uint32_t pitch = ((f[0] >> 22) & 0x1FF) << 5;  // texels
+    const uint64_t filas = ((alto + bloque - 1) / bloque + 31) & ~31u;
+    const uint64_t tam = std::min<uint64_t>(uint64_t((pitch + bloque - 1) / bloque) * bytes * filas, 16u << 20);
+    const uint32_t mips = ((f[5] >> 12) & 0x1FFFF) << 12;
+    const std::string nombre = fmt::format("{:08X}_{}x{}_f{}", base, (f[2] & 0x1FFF) + 1, alto, formato);
+    if (FILE* o = std::fopen((tex_dump_dir_ / (nombre + ".bin")).string().c_str(), "wb")) {
+      std::fwrite(memory_->TranslatePhysical(base), 1, size_t(tam), o);
+      std::fclose(o);
+    }
+    if (mips) {
+      if (FILE* o = std::fopen((tex_dump_dir_ / (nombre + ".mips")).string().c_str(), "wb")) {
+        std::fwrite(memory_->TranslatePhysical(mips), 1, size_t(tam / 2 + 4096), o);
+        std::fclose(o);
+      }
+    }
+    if (FILE* o = std::fopen((tex_dump_dir_ / (nombre + ".txt")).string().c_str(), "w")) {
+      std::fprintf(o, "%08X %08X %08X %08X %08X %08X\n", f[0], f[1], f[2], f[3], f[4], f[5]);
+      std::fclose(o);
     }
   }
 
@@ -1865,6 +1917,8 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   uint64_t clears_logged_1x_ = 0;
   std::unordered_set<uint64_t> glow_logged_;
   std::unordered_set<uint64_t> unknown_vs_logged_;
+  std::filesystem::path tex_dump_dir_;          // DumpTexture: this trace's folder (texturas_NN/)
+  std::unordered_set<uint64_t> tex_dumped_;     // base << 8 | format, written this trace
   uint32_t glow_draws_logged_ = 0;
   bool draw_tracing_ = false;
   uint32_t draw_traces_ = 0, draw_trace_n_ = 0, draw_trace_cap_ = 400;
