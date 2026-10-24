@@ -204,3 +204,28 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   (`shaders/ds_hlsl.cpp`: SPIR-V NoContraction, GLSL precise for uam), so the G-buffer and material vertex shaders,
   whose position code is the same, give the same depth again.
 
+- Run 16 (8 traces with raw textures; the precise vertex shaders did not change the picture). The earlier depth
+  mismatch theory was wrong; the traces show four real defects, each with its evidence:
+  1. **The light buffer's clear wiped the scene's depth and stencil.** Direct3D clears the k_16_16_16_16 light buffer
+     (c0 2A3, mask FFFF, depthcontrol 0) with c1-c3 left on base 000; `EmulateClear` took c1-c3 as Direct3D's way of
+     clearing depth through color (Dead Space 2) and cleared z 000 ("clear shape: msaa 2, mode 4: c0=2A3
+     z=000->FFFFFF3F"), right before the light volumes and the material pass. The lights' stencil marks failed (the
+     menu's machines unlit, black), and the material pass tested against a cleared depth, so whatever came later in
+     the frame was drawn over what is in front of it (the see-through player, his health bar showing through, the
+     ground and rocks). The clear's PS (n198) writes oC0 only, and the Xenos leaves targets the PS does not export
+     alone: c1-c3 are now cleared only when the PS writes them. (Found by a side session from run 15's menu trace.)
+  2. **Stacked shadow cascades.** The sun shadow pass (PS n155, half size, writes the shadow mask the materials read
+     as g_attenShadowBuf) samples three 960x960 depth resolves laid one after another (0ACBC000, 0B040000, 0B3C4000,
+     0x384000 apart) as one 960x2880 texture (960x1920 with two). The renderer gave it the first resolve alone,
+     stretched over the three: the mask had the player fully in shadow and everything distant shadowed (the dark
+     player and the black distant rocks). `sdk-patches/0022`: such a fetch gets an image of its size with each
+     resolve copied to its rows.
+  3. **The half-size depth read at the wrong scale.** It is resolved 640 wide (the EDRAM pitch) and read as 576x360;
+     color resolves read smaller get a copy of their corner, depth ones did not. The ambient occlusion and the depth
+     of field came out squeezed to 576/640 of the screen (the AO dump ends at x 518 of 576; outlines of the player
+     beside him in the frame). 0022 crops depth too.
+  4. **Nested loops in the shader translator.** Both levels used the one aL, so the outer loop ran once: the lamp
+     visibility shader (PS n645, 7x7 depth taps into the 64x8 visibility target) took 7 taps, and glows showed through
+     what covers them. The translator keeps the outer counter now (two shaders change: n645 and n356).
+  A scan of every sampler against the resolves of the same frame finds no other size mismatch (the color ones are the
+  corner reads, already handled).

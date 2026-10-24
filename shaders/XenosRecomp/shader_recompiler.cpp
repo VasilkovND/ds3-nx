@@ -1506,6 +1506,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     uint32_t instrAddress = 0;
     uint32_t instrSize = shader->size;
     bool simpleControlFlow = true;
+    // Loops open around the current instruction (simple control flow). The Xenos keeps a stack of aL: an inner loop
+    // has its own counter and the outer one gets its value back when it ends. With one aL for both, the inner `for`
+    // left aL at its count and the outer loop ran once (Dead Space 3's lamp visibility, 7 of its 7x7 depth taps).
+    uint32_t profundidadBucles = 0;
     // Forward jumps only (no loop, no jump back): see saltosLineales.
     bool soloHaciaDelante = true;
     uint32_t indiceCf = 0;
@@ -1715,6 +1719,16 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
             case ControlFlowOpcode::LoopStart:
                 if (simpleControlFlow)
                 {
+                    if (profundidadBucles)
+                    {
+                        // A nested loop: the outer counter is kept and given back at its LoopEnd.
+                        indent();
+                        out += "{\n";
+                        ++indentation;
+                        indent();
+                        println("int aLExterior{} = aL;", profundidadBucles);
+                    }
+                    ++profundidadBucles;
                     indent();
                     println("for (aL = 0; aL < i{}.x; aL++)", uint32_t(cfInstr.loopStart.loopId));
                     indent();
@@ -1733,6 +1747,16 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                     --indentation;
                     indent();
                     out += "}\n";
+                    if (profundidadBucles)
+                        --profundidadBucles;
+                    if (profundidadBucles)
+                    {
+                        indent();
+                        println("aL = aLExterior{};", profundidadBucles);
+                        --indentation;
+                        indent();
+                        out += "}\n";
+                    }
                 }
                 else
                 {
