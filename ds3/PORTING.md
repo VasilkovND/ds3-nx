@@ -170,4 +170,13 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
 - Also from run 7: Direct3D clears with two rectangles in one draw (6 vertices, the 640-pitch half-size targets) were
   skipped as "VS not identified" and left the previous frames in those targets; any multiple of 3 vertices is a
   clear now. The other unidentified VS is a single point with color writes off (a fence-like draw): harmless.
+- Run 10 (normal build): the scene went dark (the player a black silhouette). The log settles it: the material pass
+  reads the lighting buffer with exp_adjust 0, unsigned, and the buffer's resolve carries copy_dest_exp_bias -5
+  ("resolve con exp bias -5 desde EDRAM formato 5"): the light pass writes up to ~32, the resolve scales by 1/32, the
+  material shader by 8. Run 7 lacked the resolve scale (32x too bright: washed out, chrome armour, "transparent"
+  surfaces); run 10 had it (gears2-nx 0036) plus the fixed-point read conversion on top (2048x too dark). The
+  conversion is off again (`nfsmw_dk_16_16_fijo` false, as in gears2-nx; the four-channel case removed): reads give
+  the value the resolve wrote, which the hardware also returns for this data path.
+- Frame dumps restart at volcado_00 every session and overwrite the earlier ones file by file: after downloading,
+  move them away on the SD (`volcados_previos/`) so the next session's dumps are not mixed with old files.
 

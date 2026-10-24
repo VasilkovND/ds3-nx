@@ -170,7 +170,7 @@
    fs_copia_profundidad_valido_ = z.ok && nucleo_.CargarShader(fs_copia_profundidad_, z.dksh, "copia de profundidad");
 --- a/src/x360/deko/texturas.cpp
 +++ b/src/x360/deko/texturas.cpp
-@@ -17,11 +17,16 @@
+@@ -17,11 +17,17 @@
  #include <xxhash.h>
  
  #include <algorithm>
@@ -180,17 +180,24 @@
  #include <rex/x360/deko/render.h>
  #include <rex/x360/xenos.h>
  
-+REXCVAR_DEFINE_BOOL(nfsmw_dk_16_16_fijo, true, "NFSMW",
++REXCVAR_DEFINE_BOOL(nfsmw_dk_16_16_fijo, false, "NFSMW",
 +                    "deko3d: un destino k_16_16 (coma fija, -32..32) leido como textura k_16_16 da los bits como entero "
-+                    "normalizado (o el valor / 32 con signo), por 2^exp_adjust de la constante de la textura, como el "
-+                    "hardware, en vez del valor tal cual (Dead Space 3: buffer de iluminacion diferida)");
++                    "normalizado (o el valor / 32 con signo), por 2^exp_adjust de la constante de la textura, en vez del "
++                    "valor tal cual. Apagado: Gears of War 2 y Dead Space 3 leen el valor escrito (Dead Space 3 lo "
++                    "escala al resolver, copy_dest_exp_bias -5, que la copia aplica)");
  REXCVAR_DEFINE_BOOL(nfsmw_nativo_mipmaps, true, "NFSMW",
                      "Renderizador nativo: sube los niveles de mip que trae el juego (como en la Xbox 360). false: solo "
                      "el nivel base, como antes de la build 136")
-@@ -302,6 +307,41 @@
-   return &c.imagen;
- }
- 
+@@ -296,6 +302,41 @@
+       return nullptr;
+     }
+     OlvidarEstado();  // the copy bound its own target and shaders; the draw binds its pass again
++    c.version = resuelta.version;
++    ++c.imagen.version;
++  }
++  return &c.imagen;
++}
++
 +const ImagenDk* RenderDk::ResueltaFija16(const ImagenDk& resuelta, uint32_t signos, uint32_t canales,
 +                                         int32_t exp_adjust) {
 +  // Per channel: 4 signed (value / 32), 3 unsigned (the fixed-point bits as a normalized integer).
@@ -220,35 +227,21 @@
 +      return nullptr;
 +    }
 +    OlvidarEstado();
-+    c.version = resuelta.version;
-+    ++c.imagen.version;
-+  }
-+  return &c.imagen;
-+}
-+
- const ImagenDk* RenderDk::ResueltaRecortada(const ImagenDk& resuelta, uint32_t ancho, uint32_t alto) {
-   if (recortadas_.size() > 64) {  // resolves recreated at other sizes leave theirs behind
-     for (auto& [clave, c] : recortadas_) {
-@@ -557,6 +597,25 @@
+     c.version = resuelta.version;
+     ++c.imagen.version;
+   }
+@@ -557,6 +598,17 @@
        // The emulation's copy swaps channels in memory (copy_dest_swap) and the fetch swizzle undoes it; here the copy
        // is image to image, so the swap goes into the host channels.
        const uint16_t host = resuelta->intercambio_rb ? kSwizzleBGRA : kSwizzleRGBA;
-+      // A k_16_16 / k_16_16_16_16 target (fixed point, -32..32) read back as a texture of its format: the hardware
-+      // returns its 16 bits as a normalized integer (unsigned: about value / 64; signed: value / 32), scaled by the
-+      // fetch constant's exp_adjust (dword 3, bits 13-18). Gears of War 2's velocity buffer is read with exp_adjust
-+      // such that it gets the value back; Dead Space 3's deferred lighting buffer (k_16_16_16_16, read unsigned and
-+      // x 8 in its material shaders) must come out as the hardware gives it, or every lit surface is washed out.
++      // A k_16_16 target (fixed point, -32..32) read back as a k_16_16 texture, as the hardware's bits would read
++      // (unsigned: about value / 64; signed: value / 32) times 2^exp_adjust of the fetch constant (dword 3, bits 13-18).
++      // Off by default: Gears of War 2 and Dead Space 3 read the value they wrote. (Dead Space 3's deferred lighting
++      // buffer, k_16_16_16_16, is scaled by its resolve's copy_dest_exp_bias of -5 instead, which the copy applies;
++      // converting it here as well made the scene black.)
 +      const int32_t exp_adjust = int32_t(f[3] << 13) >> 26;  // bits 13-18, signed
 +      if ((f[1] & 0x3F) == 25 && resuelta->formato == DkImageFormat_RG16_Float && REXCVAR_GET(nfsmw_dk_16_16_fijo)) {
 +        if (const ImagenDk* convertida = ResueltaFija16(*resuelta, signos, 2, exp_adjust)) {
-+          return VistaDe(*convertida, swizzle, host);
-+        }
-+      }
-+      // The same with four channels: Dead Space 3's deferred lighting buffer, a k_16_16_16_16 target the material pass
-+      // reads back unsigned (x 8 in its shader). Read as the float it holds, every lit surface came out ~64 times too
-+      // bright: white, washed out, armour like chrome.
-+      if ((f[1] & 0x3F) == 26 && resuelta->formato == DkImageFormat_RGBA16_Float && REXCVAR_GET(nfsmw_dk_16_16_fijo)) {
-+        if (const ImagenDk* convertida = ResueltaFija16(*resuelta, signos, 4, exp_adjust)) {
 +          return VistaDe(*convertida, swizzle, host);
 +        }
 +      }
