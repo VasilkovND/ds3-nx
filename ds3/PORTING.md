@@ -123,5 +123,5 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   (`[[modules]]` in the manifest, `generated/default` + `generated/game`; `names_default.toml` for the title, 17
   branch targets), the game is a guest module linked into the NRO (rexglue-sdk-nx's `rexglue_switch_link_module`,
   from fc3-nx), the hooks on game functions build inside that module, and `XamSwapDisc` goes through a handler the
-  SDK gains in `sdk-patches/0014`. Rebuild in progress when the session ended; not run yet.
+  SDK gains in `sdk-patches/0014`. Built (NRO 65 MB, 890 steps) and copied to the console; run 2 pending.
 
