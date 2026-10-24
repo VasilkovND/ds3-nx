@@ -123,6 +123,9 @@ REXCVAR_DEFINE_INT32(ds3_trazas_max, 20, "DS3", "Trazas de fotograma como mucho"
 REXCVAR_DEFINE_BOOL(ds3_perfil_pilas, true, "DS3",
                     "Crea logs/rex/perfil_pilas.flag al arrancar: el perfil de CPU muestrea las pilas de cada hilo "
                     "(rex_perfil.log), algo mas lento");
+REXCVAR_DEFINE_BOOL(ds3_coronas_con_profundidad, true, "DS3",
+                    "Los resplandores de las lamparas que el juego dibuja sin prueba de profundidad la hacen (sin "
+                    "escribirla): no se ven a traves de la roca");
 #endif
 
 namespace ds3::gpu {
@@ -150,6 +153,7 @@ constexpr int kMaxIndirectDepth = 4;
 constexpr auto kWaitRegMemMax = std::chrono::milliseconds(200);
 constexpr uint16_t kMaxExtent = 2048 >> 3;  // xenos::kTexture2DCubeMaxWidthHeight >> 3
 constexpr int32_t kFakeSampleCount = 1000;  // the SDK's query_occlusion_fake_sample_count
+constexpr uint64_t kCoronaPs = UINT64_C(0xC7F0B2D099874699);  // the lamp glow PS (n911), by its container's XXH3
 constexpr auto kReportEvery = std::chrono::seconds(10);
 
 // Reads the ring (a power-of-two buffer of words that wraps) or an indirect buffer (linear).
@@ -643,6 +647,9 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     REXLOG_INFO("[gpu] draws: {} geometry, {} sent to the renderer: {} drawn, {} rejected by it; skipped here: "
                 "{} without VS, {} without PS (the renderer logs each rejection cause once)",
                 geometria_, enviados_, dibujados, rechazados, sin_vs_, sin_ps_);
+    // Occlusion queries are answered "visible" (OcclusionQuery): counted, in case some visibility comes from them.
+    REXLOG_INFO("[gpu] lamp glows depth-tested here: {}; occlusion queries answered visible: {}", corona_depth_draws_,
+                occlusion_queries_);
 #endif
   }
 
@@ -1304,6 +1311,21 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
       request.registros = alias.Apply(msaa);
       ++generacion_encuadre_;  // the scaled viewport and scissor are not the mirror's
     }
+    // The lamp glows (PS n911: a flare texture times the color the CPU computed from the lamp's visibility) come in
+    // two kinds: some depth-tested, most drawn over everything, their size and brightness taken from the 64x8
+    // visibility pass (PS n645) read back to the CPU. In the prologue the fires behind the rock walls stayed visible
+    // through them with that pass translated and cleared as the console does (build 31). Their quads are at the
+    // lamp's own depth (the corona VS puts modulate_by_corona_info_vs.zw there: 37.58 / 38.06 for a fire 38 units
+    // away), the same depth n645 compares with the scene, so the depth test, without writing, hides exactly the
+    // parts behind what covers the lamp. ds3_coronas_con_profundidad = false draws them as the game asks.
+    const uint32_t depth_control = Register(g::XE_GPU_REG_RB_DEPTHCONTROL);
+    const bool corona_depth = ps_ && ps_->huella_contenedor == kCoronaPs && !(depth_control & 0x2) &&
+                              REXCVAR_GET(ds3_coronas_con_profundidad);
+    if (corona_depth) {
+      // Z enable, no Z write, LEQUAL (zfunc 3); the stencil bits as they were.
+      registers_[g::XE_GPU_REG_RB_DEPTHCONTROL] = (depth_control & ~UINT32_C(0x76)) | 0x2 | (3u << 4);
+      ++corona_depth_draws_;
+    }
     request.vs = vs_;
     request.ps = ps_;
     request.vs_microcodigo = vs_microcode_;
@@ -1314,6 +1336,7 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     request.generacion_encuadre = generacion_encuadre_;
     ++enviados_;
     const bool drawn = destinos_->Dibujar(request);
+    if (corona_depth) registers_[g::XE_GPU_REG_RB_DEPTHCONTROL] = depth_control;
     if (draw_tracing_) DrawTraceLine(drawn);
     if (msaa) {
       ++generacion_encuadre_;  // back to the mirror's for the next draw
@@ -1938,6 +1961,7 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     const bool end_via_z_fail = counts->ZFail_A == kQueryFinished || counts->ZFail_B == kQueryFinished;
     std::memset(counts, 0, sizeof(*counts));
     if (end_via_z_pass || end_via_z_fail) {
+      ++occlusion_queries_;
       counts->ZPass_A = kFakeSampleCount;
       counts->Total_A = kFakeSampleCount;
     }
@@ -1981,6 +2005,7 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   uint64_t generacion_vs_ = 0, generacion_constantes_vs_ = 0, generacion_constantes_ps_ = 0;
   uint64_t generacion_fetch_ = 0, generacion_encuadre_ = 0;
   uint64_t geometria_ = 0, enviados_ = 0, sin_vs_ = 0, sin_ps_ = 0;
+  uint64_t corona_depth_draws_ = 0, occlusion_queries_ = 0;
   std::array<uint64_t, 16> color_formats_{};
   std::array<uint64_t, 2> depth_formats_{};
   std::array<uint64_t, 32> primitive_types_{};
