@@ -318,7 +318,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--disc1", type=Path, required=True, help="Disc 1: ISO, or a .7z holding it")
     ap.add_argument("--disc2", type=Path, help="Disc 2: ISO, or a .7z holding it")
-    ap.add_argument("--tu", type=Path, required=True, help="Title Update 1: the package, or a folder/.zip with it")
+    ap.add_argument("--tu", type=Path,
+                    help="Title Update 1: the package, or a folder/.zip with it (without it only disc1/ and disc2/ "
+                         "are written, for a tu/ made before)")
     ap.add_argument("-o", "--out", type=Path, required=True)
     ap.add_argument("--tu-only", action="store_true", help="only write tu/ (what tools/codegen.sh needs)")
     a = ap.parse_args()
@@ -336,21 +338,28 @@ def main() -> None:
     if title != TITLE_ID or (disc, discs) != (1, 2):
         sys.exit(f"{a.disc1}: title {title:08X} disc {disc}/{discs}: not Dead Space 3's Disc 1")
     print(f"  Disc 1: Media ID {media:08X}")
-    game_xexp, default_xexp = title_update(a.tu, media)
-    edition = TESTED.get(media)
-    if edition is None:
-        print(f"  warning: Media ID {media:08X} is not an edition this port was tested with; trying anyway")
-    elif sha256(exes[f"{GAME}.xex"]) != edition[1] or sha256(game_xexp) != edition[2]:
-        print(f"  warning: the executable or the title update differs from the tested {edition[0]} edition")
-    else:
-        print(f"  {GAME}.xex + TU1: ok ({edition[0]} edition)")
+    if a.tu is not None:
+        game_xexp, default_xexp = title_update(a.tu, media)
+        edition = TESTED.get(media)
+        if edition is None:
+            print(f"  warning: Media ID {media:08X} is not an edition this port was tested with; trying anyway")
+        elif sha256(exes[f"{GAME}.xex"]) != edition[1] or sha256(game_xexp) != edition[2]:
+            print(f"  warning: the executable or the title update differs from the tested {edition[0]} edition")
+        else:
+            print(f"  {GAME}.xex + TU1: ok ({edition[0]} edition)")
 
-    tu = a.out / "tu"
-    tu.mkdir(parents=True, exist_ok=True)
-    (tu / "default.xex").write_bytes(exes["default.xex"])
-    (tu / "default.xexp").write_bytes(default_xexp)
-    (tu / f"{GAME}.xex").write_bytes(exes[f"{GAME}.xex"])
-    (tu / f"{GAME}.xexp").write_bytes(game_xexp)
+        tu = a.out / "tu"
+        tu.mkdir(parents=True, exist_ok=True)
+        (tu / "default.xex").write_bytes(exes["default.xex"])
+        (tu / "default.xexp").write_bytes(default_xexp)
+        (tu / f"{GAME}.xex").write_bytes(exes[f"{GAME}.xex"])
+        (tu / f"{GAME}.xexp").write_bytes(game_xexp)
+    elif a.tu_only:
+        sys.exit("--tu-only needs --tu")
+    else:
+        print("  no --tu: tu/ is not written, only disc1/ and disc2/")
+        if media not in TESTED:
+            print(f"  warning: Media ID {media:08X} is not an edition this port was tested with; trying anyway")
     if a.tu_only:
         print(f"Ready: {tu}")
         return
