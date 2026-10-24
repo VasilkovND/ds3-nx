@@ -1185,6 +1185,7 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   void Draw() {
     ++geometria_;
     FrameTraceDraw();
+    if (in_query_) LogQueryDraw();
     namespace g = rex::graphics;
     // Depth only (RB_MODECONTROL 5): the GPU runs no pixel shader, so the VS is enough.
     const bool depth_only = (Register(g::XE_GPU_REG_RB_MODECONTROL) & 0x7) == 5;
@@ -1964,7 +1965,31 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
       ++occlusion_queries_;
       counts->ZPass_A = kFakeSampleCount;
       counts->Total_A = kFakeSampleCount;
+      if (draw_tracing_) REXLOG_INFO("[draws]   occlusion query end at {:08X}: {} draws inside", address, query_draws_);
+      in_query_ = false;
+    } else {
+      if (draw_tracing_) REXLOG_INFO("[draws]   occlusion query begin at {:08X}", address);
+      in_query_ = true;
+      query_draws_ = 0;
     }
+  }
+
+  // What the game measures with its occlusion queries (all answered "visible"): each new kind of draw inside one,
+  // once (run 27: ~3 queries a frame; the lamp glows and the blizzard's snow sheets are the suspects).
+  void LogQueryDraw() {
+    namespace g = rex::graphics;
+    ++query_draws_;
+    const uint32_t init = Register(g::XE_GPU_REG_VGT_DRAW_INITIATOR);
+    const uint64_t key = (uint64_t(vs_ ? vs_->numero : 0xFFFF) << 48) | (uint64_t(ps_ ? ps_->numero : 0xFFFF) << 32) |
+                         (uint64_t(Register(g::XE_GPU_REG_RB_DEPTHCONTROL) & 0xFFFF) << 16) |
+                         (Register(g::XE_GPU_REG_RB_COLOR_MASK) & 0xFFFF);
+    if (query_kinds_.size() >= 32 || !query_kinds_.insert(key).second) return;
+    REXLOG_INFO("[gpu] draw inside an occlusion query: VS n{} PS n{}, prim {} with {} vertices, c0 {:03X} z {:03X}, "
+                "depthctl {:08X}, color mask {:04X}, mode {}",
+                vs_ ? int(vs_->numero) : -1, ps_ ? int(ps_->numero) : -1, init & 0x3F, init >> 16,
+                Register(g::XE_GPU_REG_RB_COLOR_INFO) & 0xFFF, Register(g::XE_GPU_REG_RB_DEPTH_INFO) & 0xFFF,
+                Register(g::XE_GPU_REG_RB_DEPTHCONTROL), Register(g::XE_GPU_REG_RB_COLOR_MASK),
+                Register(g::XE_GPU_REG_RB_MODECONTROL) & 0x7);
   }
 
   rex::ui::WindowedAppContext* app_context_ = nullptr;
@@ -2006,6 +2031,9 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   uint64_t generacion_fetch_ = 0, generacion_encuadre_ = 0;
   uint64_t geometria_ = 0, enviados_ = 0, sin_vs_ = 0, sin_ps_ = 0;
   uint64_t corona_depth_draws_ = 0, occlusion_queries_ = 0;
+  bool in_query_ = false;  // between an occlusion query's begin and end (OcclusionQuery)
+  uint32_t query_draws_ = 0;
+  std::unordered_set<uint64_t> query_kinds_;  // LogQueryDraw
   std::array<uint64_t, 16> color_formats_{};
   std::array<uint64_t, 2> depth_formats_{};
   std::array<uint64_t, 32> primitive_types_{};

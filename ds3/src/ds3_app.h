@@ -31,6 +31,7 @@
 #include "ds3_disc_swap.h"
 #include "ds3_gpu.h"
 #include "ds3_menu.h"
+#include "ds3_resolution.h"
 
 #if defined(__SWITCH__)
 // The SDK's debug shortcuts (ZL + ZR held: Down capture, Left frame dump and draw trace, Right draw-skipping modes,
@@ -113,9 +114,15 @@ class Ds3App : public rex::ReXApp {
     ds3::cpu::Configurar();
     ds3::menu::Instalar(*runtime());
 #if defined(__SWITCH__)
-    if (const int32_t mhz = REXCVAR_GET(ds3_gpu_portatil_mhz); mhz > 0) {
+    // Not on an overclocked console: there the profile became the clocks that stayed (run 27: sys-clk had the CPU at
+    // 1785 and the GPU at 614.4 at start, and from the first seconds on everything ran at the profile's 1020 / 460.8 /
+    // 1331.2, the fights CPU-bound at 23 fps; in runs 25 and 26 sys-clk had put its clocks back).
+    const uint32_t cpu_mhz = ds3::resolucion::CpuMhz();
+    if (const int32_t mhz = REXCVAR_GET(ds3_gpu_portatil_mhz); mhz > 0 && cpu_mhz <= 1020) {
       RexSwitchApmPedirGpuMhz(mhz);
       RexSwitchApmAplicar();
+    } else if (mhz > 0) {
+      REXLOG_INFO("ds3: CPU at {} MHz (overclocked): the handheld GPU profile is not requested", cpu_mhz);
     }
 #endif
     try {
