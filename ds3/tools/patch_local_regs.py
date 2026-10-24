@@ -94,6 +94,9 @@ INDIRECT = "REX_CALL_INDIRECT_FUNC("
 GOTO = re.compile(r"\bgoto (loc_[0-9A-F]+);")
 LABEL = re.compile(r"^(loc_[0-9A-F]+):\s*$")
 OTHER_CTX = re.compile(r"\bctx\b")
+# The codegen's setjmp (setjmp_address in the manifest): the context is copied before it and copied back when longjmp
+# returns to it (from ds2-nx's version of this pass).
+SETJMP_LINES = {"env = ctx;", "temp.s64 = ppc_setjmp(ctx.r3.u32);", "if (temp.s64 != 0) ctx = env;"}
 FIBER = "FiberRestoreContext"  # FiberRestoreContext(ctx, base);: back from a guest longjmp, see the docstring
 KEEP = re.compile(r"\bctx\.(?:fpscr|msr)\b")  # stays in ctx: FPSCR and MSR emulation
 COMPOUND = re.compile(r"^(?:\+|-|\*|/|%|&|\||\^|<<|>>)=")
@@ -190,6 +193,8 @@ class Func:
         while self.start < len(body) and body[self.start].strip().startswith("REX_FUNC_PROLOGUE"):
             self.start += 1
         self.ok = True  # can be rewritten (no unknown ctx use)
+        self.setjmp = False  # uses setjmp: left as it is, but analysed
+        self.unknown = False  # another use of ctx: left as it is, REF = MOD = ALL
         self.reason = ""
         n = len(body)
         self.n = n
@@ -238,8 +243,15 @@ class Func:
                 stripped = CALL.sub("", stripped)
                 stripped = TRAP.sub("", stripped)
                 stripped = stripped.replace(INDIRECT, "")
-                if OTHER_CTX.search(stripped) or "ppc_setjmp" in code or "SEH_" in code:
+                if code.strip() in SETJMP_LINES:
+                    # setjmp (Lua's protected calls, libpng/JPEG errors): the function stays as it is, with ctx
+                    # always exact, but its text still gives its REF, MOD and what it reads after its calls.
                     self.ok = False
+                    self.setjmp = True
+                    self.reason = "setjmp"
+                elif OTHER_CTX.search(stripped) or "ppc_setjmp" in code or "SEH_" in code:
+                    self.ok = False
+                    self.unknown = True
                     self.reason = "ctx use: " + line.strip()[:60]
                 calls = [("i", None) for _ in find_indirect(code)]
                 for m in CALL.finditer(code):
@@ -592,7 +604,7 @@ def phase1(args):
     out = {}
     for name, _, _, f in funcs:
         # A function the pass cannot follow (another use of ctx) may read and change anything.
-        out[name] = summarize(f) if f is not None and f.ok else None
+        out[name] = summarize(f) if f is not None and not f.unknown else None
     return out
 
 

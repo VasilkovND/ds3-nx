@@ -1,6 +1,13 @@
 # Names and hints for the codegen (tools/codegen.sh adds them to the manifest). Addresses are the TU1 image's
 # (deadspace_game_f.xex 0.0.1.2).
 #
+# The game's setjmp and longjmp (DS2: setjmp_8295ED20, longjmp_8295EA00; matched by body). Named here the codegen turns
+# their call sites into ppc_setjmp / ppc_longjmp: without them a longjmp (a Lua error, a bad PNG or JPEG, the XGraphics
+# microcode compiler's error path) returned to its caller instead of to its setjmp. These keys belong to the module's
+# own table: tools/codegen.sh puts this file right under the [[modules]] header.
+setjmp_address = 0x88C99620
+longjmp_address = 0x88C991F0
+
 # Names for the functions the Switch code hooks, found by matching function bodies against Dead Space 2's PDB-named
 # recompiled tree (tools/match_funcs.py: 5,460 of DS2's names match a DS3 function exactly; tools/fuzzy_find.py for
 # the rest). CMake compiles each hook only when its names are here.
@@ -19,6 +26,14 @@ name = "ds3_XGRegisterVertexShader"
 
 [entrypoint.functions.0x88A2CEF0]
 name = "ds3_XGRegisterPixelShader"
+
+# The Win32 SetThreadPriority (src/ds3_game_cpu.cpp). DS2: SetThreadPriority_8237C0B0, exact body match.
+[entrypoint.functions.0x88BA72D0]
+name = "ds3_SetThreadPriority"
+
+# RenderWare Audio's final compressor (src/ds3_audio.cpp): the plug-in Process Mixer::Execute calls, hot in run 6.
+[entrypoint.functions.0x886C6ED8]
+name = "ds3_rw_audio_Compressor1_Process"
 
 # RenderWare Audio's mixer leaf loops (src/ds3_audio.cpp: NEON versions), byte for byte Dead Space 2's.
 [entrypoint.functions.0x886BE8E8]

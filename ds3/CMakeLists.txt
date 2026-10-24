@@ -36,6 +36,10 @@ add_executable(ds3
 ds3_setup_target(ds3)
 rexglue_switch_add_deko3d(ds3)
 target_compile_definitions(ds3 PRIVATE DS3_DEKO3D=1)
+# Debug modes (src/ds3_gpu.cpp, from ds2-nx): ZL + ZR shortcuts (frame dump and draw trace, captures, draw-skipping
+# modes), telemetria.flag next to the NRO. On while the port is brought up; a release build sets it OFF.
+option(DS3_DEPURACION "Debug modes: ZL + ZR shortcuts, telemetria.flag" ON)
+target_compile_definitions(ds3 PRIVATE DS3_DEPURACION=$<BOOL:${DS3_DEPURACION}>)
 target_include_directories(ds3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../shaders ${REXSDK_DIR}/thirdparty/xxHash)
 
 # The game itself, deadspace_game_f.xex, a DLL default.xex loads: a guest module linked into the NRO. Its name is the
@@ -58,7 +62,9 @@ function(ds3_add_hook source)
 endfunction()
 ds3_add_hook(src/ds3_shader_dump.cpp ds3_D3DDevice_CreateVertexShader ds3_D3DDevice_CreatePixelShader
              ds3_XGRegisterVertexShader ds3_XGRegisterPixelShader)
-ds3_add_hook(src/ds3_audio.cpp rw__audio__core__MixWithGain rw__audio__core__CopyWithGain)
+ds3_add_hook(src/ds3_audio.cpp rw__audio__core__MixWithGain rw__audio__core__CopyWithGain
+             ds3_rw_audio_Compressor1_Process)
+ds3_add_hook(src/ds3_game_cpu.cpp ds3_SetThreadPriority)
 ds3_setup_game_module(ds3 ds3_deadspace_game_f ${DS3_GAME_HOOKS})
 
 # The version (Homebrew Menu and the first lines of the log) and the commit it was built from, so a log a player sends

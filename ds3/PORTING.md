@@ -144,4 +144,17 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   XGRegisterPixelShader, not Create*Shader: now hooked too, the container rebuilt from the object and its microcode),
   4 more indirect calls to functions not generated (named in `names.toml`). Debug shortcuts (ZL + ZR) on by default
   (`ds3_atajos_depuracion`) for the stack sampler.
+- Run 6 (stack samples in fights; analysis by a read-only side session): the dips are CPU-bound, and about a fifth of
+  the main thread and of RenderWare Audio's two mixer threads was waiting on the SDK's guest clock mutex (every guest
+  `mftb` takes it; RW audio reads the timebase around each plug-in). `sdk-patches/0017` makes `UpdateGuestClock`
+  lock-free (atomics, each caller claims its share of the host time; per-thread monotonic; 0013's sleep clamp kept).
+  Also: the final compressor's bypass (`sub_886C6ED8`, hot in the samples; its limiter twin never runs), the Win32
+  `SetThreadPriority` (`sub_88BA72D0`) answered without the object table when priorities are ignored (8-10 % of each job
+  worker), 103 DKSH variants the console compiled added to `dksh_variants.txt` (the compile thread reached 60 % of a
+  core in fights). The game's `setjmp`/`longjmp` (0x88C99620 / 0x88C991F0) are named in the manifest now (a
+  correctness fix: a longjmp used to return to its caller), and `patch_local_regs.py` gets ds2-nx's handling of the
+  codegen's setjmp (those 4 functions left as they are but analysed): offline it rewrites 54,665 functions, 4 left.
+- The unknown-VS draws (still ~7 %, IM_LOAD_IMMEDIATE: Direct3D's own shaders, not from the hooked creation calls)
+  now log their state (primitive, mask, formats, c0) once each; the frame dump and draw trace come back with
+  ds2-nx's `ds3_gpu.cpp` under `DS3_DEPURACION` (ON while the port is brought up).
 

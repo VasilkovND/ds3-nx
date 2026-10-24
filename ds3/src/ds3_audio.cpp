@@ -2,14 +2,21 @@
 //
 // Dead Space 3 mixes with the same RenderWare Audio (rwaudiocore) as Dead Space 2, where the mixer thread was the
 // heaviest after the game's own. ds3/codegen/names.toml names the functions hooked here (MixWithGain and CopyWithGain
-// are byte for byte Dead Space 2's); CMake compiles this file only when both names are there. Dead Space 2's other
-// audio hooks (the final compressor's bypass, per-stage timers) wait for their functions to be found in DS3.
+// are byte for byte Dead Space 2's); CMake compiles this file only when their names are there.
+//
+// The final compressor (Dead Space 2: rw::audio::core::Compressor1::Process, a third of its mixer thread) has its own
+// bypass: with its threshold at 0 dB or its ratio at 1 it leaves the mixer's buffer as it is (it works in place),
+// clears its state and returns 1. ds3_audio_sin_compresor takes that path always. In Dead Space 3 (a newer
+// rwaudiocore) it is the 98-instruction plug-in Process at 0x886C6ED8 that Mixer::Execute calls and that run 6's stack
+// samples show (its twin at 0x886CB0B8, which drives the same CompressorLimiter1 loop as a limiter, never runs). What is
+// lost is the dynamics compression of the final mix: loud moments are not squeezed (the output is still clamped).
 
 #include "ds3_pch.h"
 
 #include <cstring>
 
 #include <rex/cvar.h>
+#include <rex/logging.h>
 
 #if defined(__aarch64__)
 #include <arm_neon.h>
@@ -19,6 +26,24 @@
 // stores in the context; MixWithGain alone runs 100-170 thousand times a second in a fight (about 14 % of a core at
 // stock clocks). The same arithmetic on NEON: big-endian floats swapped on load and store, multiply then add (not
 // fused), as vmaddfp.
+
+REXCVAR_DEFINE_BOOL(ds3_audio_sin_compresor, true, "DS3",
+                    "Saltarse el compresor final del audio del juego (su propio camino de bypass): parte del hilo de "
+                    "mezcla. false = el sonido original, mas CPU");
+
+REX_EXTERN(__imp__ds3_rw_audio_Compressor1_Process);
+REX_EXTERN(ds3_rw_audio_Compressor1_Process) {
+  if (REXCVAR_GET(ds3_audio_sin_compresor)) {
+    static bool avisado = false;
+    if (!avisado) {
+      avisado = true;
+      REXLOG_INFO("[audio] compresor final del juego desactivado (ds3_audio_sin_compresor)");
+    }
+    ctx.r3.u64 = 1;  // what the bypass returns
+    return;
+  }
+  __imp__ds3_rw_audio_Compressor1_Process(ctx, base);
+}
 
 REXCVAR_DEFINE_BOOL(ds3_audio_nativo, true, "DS3",
                     "MixWithGain y CopyWithGain del mezclador en NEON nativo en vez de traducidos");
