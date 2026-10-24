@@ -10,8 +10,33 @@ and dantes-inferno-nx, whose from-scratch codegen it uses.
 > You need your own copy of the game (both discs and Title Update 1). This repository contains no game data or game
 > code: the code, the shaders and the NRO are all made on your computer from your copy.
 
-Status: **in development, not playable.** The code generates and builds into an NRO; it has not run on a console yet.
-Details and the plan: [ds3/PORTING.md](ds3/PORTING.md).
+Status: **1.0.0, playable.** Tested on a console in handheld mode from the start of the game through the prologue
+and into chapter 1, at stock clocks (540p, close to 30 fps) and overclocked (720p). Not tested yet: docked mode, Disc 2
+(chapters 5-10, the disc swap). Details and every problem met:
+[ds3/PORTING.md](ds3/PORTING.md).
+
+## Controls and options
+
+| Combination | What it does |
+| --- | --- |
+| **ZL + ZR + Minus** | Opens the options menu over the game: **Up / Down** choose the resolution, **A** saves, **B** closes. While it is open the game does not see the controller |
+
+**Resolution.** Two modes, chosen in the menu and saved in `ds3_resolucion.txt` beside the NRO; the game sets its
+scene size when it starts, so a new choice applies **at the next start**:
+
+| Mode | For | Scene |
+| --- | --- | --- |
+| **720p** | overclocked consoles (default when the CPU runs at 1500 MHz or more) | 1152x720, the console original's own size |
+| **540p** | stock clocks (default otherwise) | 864x540, upscaled to the screen |
+
+In handheld mode the port asks Horizon for its handheld performance profile with the GPU at 460.8 MHz (one that
+commercial games use, not an overclock; CPU and memory clocks are not raised). Docked, or with sys-clk setting the
+clocks, nothing changes. `ds3_gpu_portatil_mhz = 0` in `ds3.toml` leaves the stock 307.2 MHz.
+
+**`ds3.toml`** beside the NRO sets the port's options (`name = value` lines). For bug reports:
+`ds3_atajos_depuracion = true` turns on the debug shortcuts (ZL + ZR held with the D-pad: capture, frame dump and draw
+trace, draw-skipping modes; Up toggles the FPS counter, the only one on by default), and an empty `telemetria.flag`
+beside the NRO turns on the automatic captures, frame dumps, frame traces and the CPU stack profile (they cost frames).
 
 ## Layout
 
@@ -39,7 +64,8 @@ ds3/tools/build_mac.sh sd/ds3-nx/tu
 1. `ds3/tools/codegen.sh`: builds ReXGlue v0.10.0's `rexglue` tool for the Mac (with the codegen fixes of
    [Hell's Gate](https://github.com/florinp93/hells-gate-recomp)'s SDK patch, fetched at a pinned commit), generates the
    C++ from your `deadspace_game_f.xex` + `deadspace_game_f.xexp` (~54,500 functions) with `ds3/codegen/names.toml`,
-   turns the branches the codegen left as traps into gotos and calls, and runs the CPU passes.
+   turns the branches the codegen left as traps into gotos and calls, and runs the CPU passes (the guest registers in
+   host locals, `LOCALREGS=1` by default; `LOCALREGS=0` builds without it).
 2. `ds3/tools/shaders.sh`, once the console has dumped the game's shaders: `ds3_shaders.dslib` and
    `shadercache_dksh.bin`.
 3. The NRO: `ds3/out/sw/ds3.nro`.

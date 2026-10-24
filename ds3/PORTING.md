@@ -15,11 +15,14 @@ family and EA libraries) and dantes-inferno-nx's `dante/PORTING.md` (the from-sc
 | Codegen from `deadspace_game_f.xex` + TU1 | done: 54,556 functions, 200 units, 210 MB of C++, 0 traps left |
 | Names from Dead Space 2 (`tools/match_funcs.py`) | 5,460 exact matches; Create*Shader and the mixer named |
 | NRO links | done: `ds3.nro` 63 MB (882 build steps, ~15 min on 10 M1 Pro cores), shader dump and NEON mixer hooks in |
-| On the console (`/switch/ds3-nx/`: NRO, `tu/`, `disc1/`, over FTP) | first run pending |
-| Boots to the first frame | - |
-| Disc 2 (`stage_sd.py --disc2`), the swap at chapter 5 | needs the user's Disc 2 |
-| Shaders dumped on the console, library and DKSH cache | - |
-| CPU passes: guest registers in host locals (`LOCALREGS=1`) | after the game runs as it is |
+| On the console (`/switch/ds3-nx/`: NRO, `tu/`, `disc1/`, over FTP) | runs (from run 1) |
+| Boots to the first frame, menus, prologue, chapter 1 | done (runs 1-26) |
+| Shaders dumped on the console, library and DKSH cache | done (1,179 shaders, 10,000+ DKSH variants) |
+| CPU passes: guest registers in host locals (`LOCALREGS=1`) | on by default |
+| Performance: 540p / 720p options menu (ZL + ZR + Minus), handheld GPU profile 460.8 MHz, audio thread priorities | done: close to 30 fps at 540p on stock clocks |
+| Disc 2 (`stage_sd.py --disc2`), the swap at chapter 5 | not tested yet (needs the user's Disc 2) |
+| Docked mode | not tested yet |
+| 1.0.0 | build 32 |
 
 ## What is known about the game
 
@@ -334,3 +337,14 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   targets were taken, a Dead Space 2 rule against a same-shaped draw of game data); lamps not tested in a frame kept
   another lamp's old visible value, which the CPU reads back. Dead Space 3's clear VS (recognized by its microcode,
   its color in its vertices) now makes any single-sampled rect a clear, whatever the format (build 31).
+- Run 26 (build 31): the blizzard is right (fog-colored sky behind the snow). The fires still glow through the rock,
+  with the 64x8 lamp visibility target now cleared before each pass (logged). The glows (PS n911, a flare texture
+  times a color the CPU computes from the visibility read back) come two ways in the same frame: some depth-tested
+  (RB_DEPTHCONTROL 0x732), most over everything (0x730), the ones through the rock among them (draws 1160-1169 of the
+  run 25 trace, VS n992: no visibility read of their own, only the CPU's color). Their quads sit at the lamp's own
+  depth (modulate_by_corona_info_vs.zw = 37.58 / 38.06 for a fire 38 units away, exactly the projection's z/w there),
+  the depth n645 compares with the scene. Build 32 depth-tests those glows without writing depth
+  (`ds3_coronas_con_profundidad`), and counts the occlusion queries answered "visible" (EVENT_WRITE_ZPD gets a fake
+  count, the SDK's rule), in case some lamp's visibility comes from one. Release 1.0.0: the ZL + ZR debug shortcuts off by
+  default (`ds3_atajos_depuracion` in `ds3.toml`; the telemetry already needed `telemetria.flag`), `LOCALREGS=1` the
+  default.

@@ -34,10 +34,10 @@
 
 #if defined(__SWITCH__)
 // The SDK's debug shortcuts (ZL + ZR held: Down capture, Left frame dump and draw trace, Right draw-skipping modes,
-// R CPU stack sampler, L GPU lap; Up the FPS counter): the SDK has them off (a release build); on while the port is
-// being brought up.
+// R CPU stack sampler, L GPU lap; Up the FPS counter): off since 1.0.0 except the FPS counter; ds3.toml turns them on
+// for bug reports.
 REXCVAR_DECLARE(bool, switch_atajos_depuracion);
-REXCVAR_DEFINE_BOOL(ds3_atajos_depuracion, true, "DS3",
+REXCVAR_DEFINE_BOOL(ds3_atajos_depuracion, false, "DS3",
                     "Atajos de depuracion con ZL+ZR (captura, volcado de fotograma, modos de omision, muestreo de "
                     "pilas con R). false = solo el contador de FPS");
 #endif

@@ -22,8 +22,8 @@
 #      The traps left (branches to entries the codegen still does not tie up) become gotos and tail calls
 #      (patch_branch_traps.py); any it cannot place stops the build.
 #   4. Ours, for the CPU (from gears2-nx and dantes-inferno-nx): patch_stack_access.py and patch_inline_calls.py, and
-#      with LOCALREGS=1 patch_local_regs.py (the guest registers in host locals, gow2/CPU_OPTIMIZATION.md in gears2-nx);
-#      off until the game runs as it is (guest setjmp sites are not known yet). PLR_CHECK=1 makes its check build.
+#      with LOCALREGS=1 (the default; 0 turns it off) patch_local_regs.py (the guest registers in host locals,
+#      gow2/CPU_OPTIMIZATION.md in gears2-nx). PLR_CHECK=1 makes its check build.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -34,7 +34,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/ds3/out"
 CG="$OUT/codegen"
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN)}"
-LOCALREGS="${LOCALREGS:-0}"
+LOCALREGS="${LOCALREGS:-1}"
 EXE="deadspace_game_f"
 
 HELLS_GATE_COMMIT="3ce3993b0f03c77353f8f10fdcd982160c9a2d18"   # 2026-10-16, v0.8.4-beta
