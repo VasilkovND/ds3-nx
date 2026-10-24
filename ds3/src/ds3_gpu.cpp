@@ -1610,6 +1610,17 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
                 Register(g::XE_GPU_REG_RB_STENCILREFMASK), Register(g::XE_GPU_REG_RB_MODECONTROL) & 0x7,
                 Register(g::XE_GPU_REG_RB_SURFACE_INFO) & 0x3FFF, (Register(g::XE_GPU_REG_RB_SURFACE_INFO) >> 16) & 0x3,
                 why ? why : drawn ? "drawn" : "REJECTED by the renderer");
+    // The shader constants the game set for this draw (registers as the ring left them): VS and PS c0-c11, which hold
+    // what the translated shaders read first (Dead Space 3's fog parameters, matrices, colors).
+    for (const uint32_t base : {0x4000u, 0x4400u}) {
+      std::string valores;
+      for (uint32_t k = 0; k < 48; ++k) {
+        float v;
+        std::memcpy(&v, &registers_[base + k], sizeof(v));
+        valores += fmt::format("{}{:.4g}", k % 4 ? "," : " ", v);
+      }
+      REXLOG_INFO("[draws]       {} c0-c11:{}", base == 0x4000u ? "vs" : "ps", valores);
+    }
     // The vertex input as D3D patched it: each fetch's format, swizzle, stride and offset. No vertex bytes: guest
     // memory is committed lazily, and even inside a vertex buffer the pages before the draw's first index may be
     // unmapped (reading vertex 0 crashed in game).
