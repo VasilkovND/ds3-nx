@@ -229,3 +229,11 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
      what covers them. The translator keeps the outer counter now (two shaders change: n645 and n356).
   A scan of every sampler against the resolves of the same frame finds no other size mismatch (the color ones are the
   corner reads, already handled).
+- Run 16, fights (side-session analysis, `ds3-fps-fight.md` in the shared notes): 26-28 fps with the three cores at
+  257-293 % and the GPU 28-33 ms a frame at 614 MHz; the worst windows are the ones where the console compiled shader
+  variants in the background (80 of them, not in the cache). Done: those 80 go into `dksh_variants.txt` (10,186
+  DKSH now), and `sdk-patches/0023` (gears2-nx's partial submits: the recorded work goes to the GPU every 256 draws,
+  `nfsmw_dk_envio_parcial`, 0 = off; descriptor-only pre-lists without the full barrier) so the GPU stops idling
+  2-10 ms a frame while the ring thread records. Left for later: the geometry cache trusting stable ranges (risk of
+  a stale pose on CPU-skinned meshes for a few frames), sleeping in Direct3D's GPU wait (needs a codegen run),
+  LOCALREGS.
