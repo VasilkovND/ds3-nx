@@ -257,3 +257,10 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
     nested `if`s closed the first at the second's target: the else part sat inside the then part and never ran. The
     upsample's edge pixels kept their texture coordinates as their color (the bright dashes along every depth edge
     in the full-size mask). Crossing jumps now make the translator use its `pc` form; only n476 and n633 change.
+  - (d) Hitches with audio stutter (side-session analysis, `ds3-run17-stutter.md` in the shared notes): in fights the
+    three cores reach 270-287 %, and the audio queue never held its configured cushion: `PumpTick` asked for an
+    extra frame only below 2 queued, so it sat at 2-6 frames instead of 10 and the game's mixer threads had to
+    answer within ~5-15 ms; under load up to 474 frames per 10 s went out as silence. `sdk-patches/0024` keeps the
+    queue at `audio_switch_tramas_en_cola`; 0025 takes the event lock out of the mixers' per-tick Reset (9.8 % of
+    their samples waited there) and wakes waiters after the unlock; 0026 logs frames over 45 ms. The 24 shader
+    variants compiled live in run 17 are in the cache now (10,210).

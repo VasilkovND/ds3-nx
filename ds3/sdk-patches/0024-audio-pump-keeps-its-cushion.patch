@@ -1,0 +1,34 @@
+--- a/src/audio/switch/switch_audio_system.cpp
++++ b/src/audio/switch/switch_audio_system.cpp
+@@ -35,7 +35,8 @@
+                     "se lee al abrir el audio");
+ REXCVAR_DEFINE_INT32(audio_switch_tramas_en_cola, 10, "Audio",
+                      "Con audio_switch_bomba: tramas del juego que se mantienen en cola antes de audout "
+-                     "(colchon; 10 = 53 ms, 6 hasta la build 105). Mas cola deja esperar al juego sin cortar la "
++                     "(colchon; 10 = 53 ms, 6 hasta la build 105; hasta la 0024 de ds3 la cola se quedaba en 2-6 "
++                     "tramas sin llegar nunca a este valor). Mas cola deja esperar al juego sin cortar la "
+                      "salida, a cambio de latencia: nfsmw_audio_esperar_servidor_ms espera hasta 30 ms; se lee "
+                      "al abrir el audio");
+ 
+@@ -352,11 +353,19 @@
+   std::lock_guard<std::mutex> guard(drivers_mutex_);
+   for (SwitchAudioDriver* driver : drivers_) {
+     const size_t queued = driver->QueuedFrames();
++    // One frame per tick is what audout takes (4 frames per 21.3 ms buffer), so one request per tick only holds
++    // the level; it never raises it. The extra request used to come only below kMinQueuedFrames, so the queue sat
++    // at 2-6 frames (the 4 the next buffer takes plus 0-2) whatever audio_switch_tramas_en_cola said, and the game's
++    // mixer threads (0x3B, sharing the cores with the main thread) had to answer each request within ~5-15 ms. In
++    // run 17's fights they did not: 47-474 frames per 10 s went out as silence. Now the extra request comes while
++    // the queue is below audio_switch_tramas_en_cola, so the cushion is really that many frames (10 = 53 ms).
++    // The client semaphore (audio_maxqframes, 8) bounds the requests a late game can owe, so the overshoot after a
++    // stall is at most that many frames, which then drain at one per tick.
+     if (queued <= output_->tramas_en_cola) {
+       driver->RequestFrame();
+     }
+-    if (queued < kMinQueuedFrames) {
+-      driver->RequestFrame();  // the queue has emptied: one more to catch up
++    if (queued < output_->tramas_en_cola || queued < kMinQueuedFrames) {
++      driver->RequestFrame();  // below the cushion: one more to build it back up
+     }
+   }
+ }

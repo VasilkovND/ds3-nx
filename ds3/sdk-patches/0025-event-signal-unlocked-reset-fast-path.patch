@@ -1,0 +1,47 @@
+--- a/src/core/threading_posix.cpp
++++ b/src/core/threading_posix.cpp
+@@ -539,25 +539,38 @@
+   virtual ~PosixCondition() = default;
+ 
+   bool Signal() override {
+-    auto lock = std::unique_lock<std::mutex>(mutex_);
+-    signal_ = true;
++    {
++      auto lock = std::unique_lock<std::mutex>(mutex_);
++      signal_.store(true, std::memory_order_relaxed);
++    }
++    // Woken after the unlock: notified under the lock, the waiter woke only to block on this same mutex
++    // (svcArbitrateLock) and needed a second wake-up. The state changed under the lock and waiters test it
++    // under the lock, so no wake-up is lost.
+     cond_.notify_all();
+     return true;
+   }
+ 
+   void Reset() {
++    // An auto-reset event is normally already clear here (the wait that returned consumed it): then there is
++    // nothing to do and the lock is not taken. RenderWare Audio's mixer threads clear their event on every tick
++    // (NtClearEvent), and in run 17 9.8 % of their samples were blocked on this lock, held by the pollers of
++    // WaitMultiple (the Audio Worker's guest callback) or by Signal. A Reset racing a Signal may land on either
++    // side of it, as it could before.
++    if (!signal_.load(std::memory_order_relaxed)) {
++      return;
++    }
+     auto lock = std::unique_lock<std::mutex>(mutex_);
+-    signal_ = false;
++    signal_.store(false, std::memory_order_relaxed);
+   }
+ 
+  private:
+-  inline bool signaled() const override { return signal_; }
++  inline bool signaled() const override { return signal_.load(std::memory_order_relaxed); }
+   inline void post_execution() override {
+     if (!manual_reset_) {
+-      signal_ = false;
++      signal_.store(false, std::memory_order_relaxed);
+     }
+   }
+-  bool signal_;
++  std::atomic<bool> signal_;
+   const bool manual_reset_;
+ };
+ 

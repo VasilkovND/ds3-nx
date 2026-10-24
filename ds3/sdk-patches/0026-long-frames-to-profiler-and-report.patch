@@ -1,0 +1,59 @@
+--- a/src/x360/deko/destinos.cpp
++++ b/src/x360/deko/destinos.cpp
+@@ -123,6 +123,18 @@
+     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+ 
+ extern "C" void RexSwitchPerfCount(unsigned id);
++// switch_perf.cpp: a frame over 45 ms, in CPU counter ticks, for the stack sampler's "durante los tirones" section.
++extern "C" void RexSwitchPerfTiron(uint64_t inicio, uint64_t fin);
++
++namespace {
++// Long frames since the last 10 s report (ring thread only, like the report). The cumulative histogram
++// cubetas_swap_ was never printed: a 10 s average of 28-30 fps hid whether the frames were a steady 33/50 ms
++// alternation or a few freezes, which is what a hitch report needs.
++uint32_t g_tirones_45 = 0;    // swap to swap over 45 ms (a missed flip at swap interval 2)
++uint32_t g_tirones_100 = 0;   // over 100 ms (a visible freeze)
++double g_tirones_ms = 0.0;    // time spent in those over 45 ms
++double g_peor_intervalo_ms = 0.0;
++}  // namespace
+ 
+ // The 30 FPS guard (nfsmw_guardia_30) lives in nfsmw_recorte_sombras.cpp.
+ namespace rex::x360 {
+@@ -2093,6 +2105,7 @@
+ }
+ 
+ bool RenderDk::Presentar(rex::ui::Presenter* presentador, const TexturaSwap& swap, uint32_t ancho, uint32_t alto) {
++  const bool fotograma_volcado = volcando_ || volcado_pedido_;  // a dump stalls on purpose: not a hitch
+   if (volcando_) {
+     TerminarVolcado();
+   }
+@@ -2129,6 +2142,14 @@
+     ++cubetas_swap_[cubeta];
+     peor_swap_ms_ = std::max(peor_swap_ms_, ms);
+     hooks_.Latido(ms);
++    if (ms > 45.0 && !fotograma_volcado) {
++      ++g_tirones_45;
++      g_tirones_100 += ms > 100.0 ? 1 : 0;
++      g_tirones_ms += ms;
++      g_peor_intervalo_ms = std::max(g_peor_intervalo_ms, ms);
++      // AhoraNs is the CPU counter (19.2 MHz) times 625/12: back to ticks, the sampler's clock.
++      RexSwitchPerfTiron(ultimo_swap_ns_ * 12 / 625, ahora * 12 / 625);
++    }
+   }
+   ultimo_swap_ns_ = ahora;
+   RecogerCompilaciones();
+@@ -2375,6 +2396,14 @@
+         geometria_.muestreo() ? (g.muestreos > 20000 ? "activo" : "con la guardia") : "APAGADO",
+         double(g.muestreos - a.muestreos) / fotogramas, g.desacuerdos);
+   }
++  X360_INFORME(
++      "[deko3d] tirones: {} intervalos entre swaps de mas de 45 ms ({:.0f} ms en total), {} de mas de 100 ms, el peor "
++      "{:.1f} ms (sin contar volcados)",
++      g_tirones_45, g_tirones_ms, g_tirones_100, g_peor_intervalo_ms);
++  g_tirones_45 = 0;
++  g_tirones_100 = 0;
++  g_tirones_ms = 0.0;
++  g_peor_intervalo_ms = 0.0;
+   tomar();
+ }
+ 
