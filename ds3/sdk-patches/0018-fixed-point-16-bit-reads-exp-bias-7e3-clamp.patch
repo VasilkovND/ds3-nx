@@ -1,0 +1,257 @@
+--- a/include/rex/x360/deko/render.h
++++ b/include/rex/x360/deko/render.h
+@@ -222,12 +222,17 @@
+   // sampling; copia3d_pendiente_: a copy since then, which the next draw or clear waits for.
+   // modos_signo (4 ints, per destination channel): 0 copy, 1 signed 8-bit, 2 biased (2x - 1); nullptr: plain copy.
+   bool Copiar3D(const ImagenDk& origen, uint32_t x0, uint32_t y0, uint32_t ancho, uint32_t alto, ImagenDk& destino,
+-                uint32_t dx, uint32_t dy, const int32_t* modos_signo = nullptr);
++                uint32_t dx, uint32_t dy, const int32_t* modos_signo = nullptr, bool limitar_7e3 = false,
++                float escala = 1.0f);  // 2^copy_dest_exp_bias (RB_COPY_DEST_INFO bits 16-21)
+   bool rop_sin_barrera_ = true;
+   bool copia3d_pendiente_ = false;
+   uint64_t copias_3d_ = 0, barreras_fragmentos_ = 0;
+   DkShader fs_copia_color_{}, fs_copia_profundidad_{}, fs_copia_signo_{};
+   bool fs_copia_color_valido_ = false, fs_copia_profundidad_valido_ = false, fs_copia_signo_valido_ = false;
++  // The copy out of a k_2_10_10_10_FLOAT target (7e3): what that format can hold (Copiar3D's limitar_7e3).
++  DkShader fs_copia_7e3_{};
++  std::set<int32_t> sesgos_vistos_copia_;  // exponent biases of color resolves already logged
++  bool fs_copia_7e3_valido_ = false;
+   // A resolved texture sampled with signed or biased components (TextureSign 1 or 2): the GPU applies them while
+   // fetching, the host image holds the unsigned values, so a converted copy is sampled instead (texturas.cpp).
+   struct ConvertidaSigno {
+@@ -235,6 +240,7 @@
+     uint64_t version = UINT64_MAX;
+   };
+   std::unordered_map<uint64_t, ConvertidaSigno> convertidas_signo_;
++  std::unordered_map<uint64_t, ConvertidaSigno> convertidas_fijas_;  // ResueltaFija16, by serie and signs
+   // A resolved texture sampled by a fetch smaller than it (a 320x180 resolve into a 640-wide texture, read as 320x180):
+   // a copy of its top-left corner at the fetch's size, so normalized coordinates cover what the game means.
+   const ImagenDk* ResueltaRecortada(const ImagenDk& resuelta, uint32_t ancho, uint32_t alto);
+@@ -249,6 +255,9 @@
+   };
+   std::unordered_map<uint64_t, VolumenResuelto> volumenes_resueltos_;
+   const ImagenDk* ResueltaConSigno(const ImagenDk& resuelta, uint32_t signos);
++  // A resolved k_16_16 / k_16_16_16_16 target read as a texture of its format (fetch format 25 / 26): converted to what
++  // the hardware returns (canales: 2 or 4).
++  const ImagenDk* ResueltaFija16(const ImagenDk& resuelta, uint32_t signos, uint32_t canales, int32_t exp_adjust);
+   deko::Subida Reservar(uint32_t bytes, uint32_t alineacion);
+ 
+   // ---- Render targets and resolved textures (nfsmw_dk_destinos.cpp)
+--- a/src/x360/deko/destinos.cpp
++++ b/src/x360/deko/destinos.cpp
+@@ -276,10 +276,31 @@
+ layout(binding = 0) uniform sampler2D origen;
+ layout(std140, binding = 0) uniform Copia {
+   ivec4 desplazamiento;
++  ivec4 modos;   // kFsCopiaSigno's; unused here
++  vec4 escala;   // 2^copy_dest_exp_bias
+ } copia;
+ layout(location = 0) out vec4 color;
+ void main() {
+-  color = texelFetch(origen, ivec2(gl_FragCoord.xy) + copia.desplazamiento.xy, 0);
++  color = texelFetch(origen, ivec2(gl_FragCoord.xy) + copia.desplazamiento.xy, 0) * copia.escala;
++}
++)";
++// The copy out of a k_2_10_10_10_FLOAT target. The Xbox 360 stores it as 7e3 floats (unsigned, at most 31.875) with a
++// 2-bit alpha: a pixel shader's negative, NaN or larger output is clamped when written. The renderer keeps the target
++// as RGBA16_Float, which holds them all, so they are clamped here, where the game reads the scene back: Gears of War 2's
++// scene had -0.17 and 74.5 in it, and its post-processing and motion blur turned them into black smears.
++constexpr const char* kFsCopia7e3 = R"(#version 460
++layout(binding = 0) uniform sampler2D origen;
++layout(std140, binding = 0) uniform Copia {
++  ivec4 desplazamiento;
++  ivec4 modos;
++  vec4 escala;
++} copia;
++layout(location = 0) out vec4 color;
++void main() {
++  vec4 t = texelFetch(origen, ivec2(gl_FragCoord.xy) + copia.desplazamiento.xy, 0);
++  vec4 tope = vec4(31.875, 31.875, 31.875, 1.0);
++  // Clamped in EDRAM units, then the resolve's exponent bias (Gears of War 2: scene x 8 in EDRAM, resolved with -3).
++  color = vec4(greaterThan(t, vec4(0.0))) * min(t, tope) * copia.escala;  // NaN compares false: 0
+ }
+ )";
+ // The same copy with each channel's TextureSign applied: 1 reads the 8-bit value as signed, 2 as biased (2x - 1).
+@@ -288,6 +309,7 @@
+ layout(std140, binding = 0) uniform Copia {
+   ivec4 desplazamiento;
+   ivec4 modos;
++  vec4 escala;  // 2^exp_adjust of the fetch that reads it (the hardware scales what it returns)
+ } copia;
+ layout(location = 0) out vec4 color;
+ void main() {
+@@ -296,6 +318,11 @@
+   vec4 firmado = max(mix(b, b - 256.0, greaterThanEqual(b, vec4(128.0))) / 127.0, vec4(-1.0));
+   color = mix(t, firmado, equal(copia.modos, ivec4(1)));
+   color = mix(color, t * 2.0 - 1.0, equal(copia.modos, ivec4(2)));
++  // 3, 4: a k_16_16 target (fixed point, -32..32, held here as is) read as a k_16_16 texture: its 16 bits are the value
++  // x 1024 (two's complement), so unsigned reads give those bits / 65535 and signed reads the value / 32.
++  color = mix(color, mod(floor(t * 1024.0 + 0.5) + 65536.0, 65536.0) / 65535.0, equal(copia.modos, ivec4(3)));
++  color = mix(color, clamp(t / 32.0, -1.0, 1.0), equal(copia.modos, ivec4(4)));
++  color *= copia.escala;
+ }
+ )";
+ constexpr const char* kFsCopiaProfundidad = R"(#version 460
+@@ -605,8 +632,10 @@
+ }
+ 
+ bool RenderDk::Copiar3D(const ImagenDk& origen, uint32_t x0, uint32_t y0, uint32_t ancho, uint32_t alto,
+-                        ImagenDk& destino, uint32_t dx, uint32_t dy, const int32_t* modos_signo) {
++                        ImagenDk& destino, uint32_t dx, uint32_t dy, const int32_t* modos_signo, bool limitar_7e3,
++                        float escala) {
+   const bool z = destino.profundidad;
++  limitar_7e3 = limitar_7e3 && !z && !modos_signo && fs_copia_7e3_valido_;
+   if (!vs_salida_valido_ || !(z ? fs_copia_profundidad_valido_ : fs_copia_color_valido_) ||
+       (modos_signo && (z || !fs_copia_signo_valido_))) {
+     return false;
+@@ -622,6 +651,8 @@
+   if (modos_signo) {
+     std::memcpy(ubo.cpu + sizeof(desplazamiento), modos_signo, 4 * sizeof(int32_t));
+   }
++  const float escalas[4] = {escala, escala, escala, escala};
++  std::memcpy(ubo.cpu + 32, escalas, sizeof(escalas));
+   const uint32_t ranura = VistaDe(origen, 0x688, z ? 0 /* RRRR */ : 0x688);
+   DkCmdBuf cmd = nucleo_.comandos();
+   MarcarGpu(kGpuCopias);
+@@ -677,7 +708,10 @@
+   dkCmdBufBindVtxAttribState(cmd, nullptr, 0);
+   dkCmdBufBindVtxBufferState(cmd, nullptr, 0);
+   const DkShader* shaders[2] = {&vs_salida_,
+-                                z ? &fs_copia_profundidad_ : modos_signo ? &fs_copia_signo_ : &fs_copia_color_};
++                                z             ? &fs_copia_profundidad_
++                                : modos_signo ? &fs_copia_signo_
++                                : limitar_7e3 ? &fs_copia_7e3_
++                                              : &fs_copia_color_};
+   dkCmdBufBindShaders(cmd, DkStageFlag_GraphicsMask, shaders, 2);
+   dkCmdBufBindUniformBuffer(cmd, DkStage_Fragment, 0, ubo.gpu, 256);
+   dkCmdBufBindTexture(cmd, DkStage_Fragment, 0, dkMakeTextureHandle(ranura, 0));
+@@ -1186,8 +1220,17 @@
+       // nfsmw_nativo_frontal_perezoso: the whole scene to the front buffer of the last Swap, not read back.
+       const int32_t maximo_lectura = REXCVAR_GET(nfsmw_nativo_leer_resueltas_texels);
+       const bool se_lee = maximo_lectura > 0 && uint64_t(ancho) * alto <= uint64_t(maximo_lectura);
++      // copy_dest_exp_bias (signed 6 bits at 16 of RB_COPY_DEST_INFO): the resolve scales by 2^bias. Gears of War 2
++      // writes its scene x8 into the 7e3 EDRAM (c0 = 8 in every scene pixel shader) and resolves it with -3; ignored,
++      // the post-processing got the scene 8 times too bright and burned it white. Only the 3D engine copy scales.
++      const int32_t sesgo_exp = int32_t(reg.rb_copy_dest_info << 10) >> 26;
++      const float escala_exp = std::ldexp(1.0f, sesgo_exp);
++      if (sesgo_exp && sesgos_vistos_copia_.insert(sesgo_exp).second) {
++        REXLOG_INFO("[deko3d] resolve con exp bias {} (x{}) desde EDRAM formato {}", sesgo_exp, escala_exp, formato_color);
++      }
+       const bool frontal_perezoso = REXCVAR_GET(nfsmw_nativo_frontal_perezoso);  // read each time: the game can switch it (ds2 safe mode)
+-      const bool frontal = frontal_perezoso && !frontal_apagado_ && base_resuelta == ultimo_frontal_ && !encoger &&
++      const bool frontal = frontal_perezoso && !frontal_apagado_ && sesgo_exp == 0 && base_resuelta == ultimo_frontal_ &&
++                           !encoger &&
+                            !se_lee && x0 == 0 && y0 == 0 && dx == 0 && dy == 0 && ancho == resuelta->imagen.ancho &&
+                            alto == resuelta->imagen.alto;
+       // What the resolve reads must be there: the useful area grows to it, a pending clear is done, the band too.
+@@ -1212,8 +1255,9 @@
+         const DkImageView destino_vista = VistaCompleta(resuelta->imagen.imagen);
+         // On the 3D engine, except the shrink (a linear blit) and the small resolves the game reads back (their
+         // read-back is a copy engine transfer: both go there, one after the other, with no barrier between).
+-        if (encoger || se_lee ||
+-            !Copiar3D(*destino_render, uint32_t(x0), uint32_t(y0), ancho, alto, resuelta->imagen, dx, dy)) {
++        if (encoger || (se_lee && sesgo_exp == 0) ||
++            !Copiar3D(*destino_render, uint32_t(x0), uint32_t(y0), ancho, alto, resuelta->imagen, dx, dy, nullptr,
++                      formato_color == 3 || formato_color == 12, escala_exp)) {
+           MarcarGpu(kGpuCopias);
+           AntesDeTransferir();
+           if (encoger) {
+@@ -1910,6 +1954,11 @@
+   fs_copia_signo_valido_ = signo.ok && nucleo_.CargarShader(fs_copia_signo_, signo.dksh, "copia con signo");
+   if (!fs_copia_signo_valido_) {
+     REXLOG_ERROR("[deko3d] no se pudo compilar la copia con signo: {}", signo.log);
++  }
++  const deko::Compilador::Resultado c7e3 = compilador_.Compilar(false, kFsCopia7e3);
++  fs_copia_7e3_valido_ = c7e3.ok && nucleo_.CargarShader(fs_copia_7e3_, c7e3.dksh, "copia de 7e3");
++  if (!fs_copia_7e3_valido_) {
++    REXLOG_ERROR("[deko3d] no se pudo compilar la copia de 7e3: {}", c7e3.log);
+   }
+   const deko::Compilador::Resultado z = compilador_.Compilar(false, kFsCopiaProfundidad);
+   fs_copia_profundidad_valido_ = z.ok && nucleo_.CargarShader(fs_copia_profundidad_, z.dksh, "copia de profundidad");
+--- a/src/x360/deko/texturas.cpp
++++ b/src/x360/deko/texturas.cpp
+@@ -17,11 +17,16 @@
+ #include <xxhash.h>
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <cstring>
+ 
+ #include <rex/x360/deko/render.h>
+ #include <rex/x360/xenos.h>
+ 
++REXCVAR_DEFINE_BOOL(nfsmw_dk_16_16_fijo, true, "NFSMW",
++                    "deko3d: un destino k_16_16 (coma fija, -32..32) leido como textura k_16_16 da los bits como entero "
++                    "normalizado (o el valor / 32 con signo), por 2^exp_adjust de la constante de la textura, como el "
++                    "hardware, en vez del valor tal cual (Dead Space 3: buffer de iluminacion diferida)");
+ REXCVAR_DEFINE_BOOL(nfsmw_nativo_mipmaps, true, "NFSMW",
+                     "Renderizador nativo: sube los niveles de mip que trae el juego (como en la Xbox 360). false: solo "
+                     "el nivel base, como antes de la build 136")
+@@ -302,6 +307,41 @@
+   return &c.imagen;
+ }
+ 
++const ImagenDk* RenderDk::ResueltaFija16(const ImagenDk& resuelta, uint32_t signos, uint32_t canales,
++                                         int32_t exp_adjust) {
++  // Per channel: 4 signed (value / 32), 3 unsigned (the fixed-point bits as a normalized integer).
++  int32_t modos[4] = {};
++  for (uint32_t i = 0; i < canales; ++i) {
++    modos[i] = ((signos >> (2 * i)) & 0x3) == 1 ? 4 : 3;
++  }
++  if (convertidas_fijas_.size() > 64) {
++    for (auto& [clave, c] : convertidas_fijas_) {
++      DestruirImagen(c.imagen);
++    }
++    convertidas_fijas_.clear();
++  }
++  ConvertidaSigno& c = convertidas_fijas_[(resuelta.serie << 20) | (uint64_t(exp_adjust & 0x3F) << 12) |
++                                          (uint64_t(canales) << 8) | (signos & 0xFF)];
++  if (!c.imagen.viva) {
++    if (!CrearImagen(c.imagen, DkImageType_2D, DkImageFormat_RGBA16_Float, resuelta.ancho, resuelta.alto, 1, 1,
++                     DkImageFlags_UsageRender, "resuelta 16_16 fija")) {
++      return nullptr;
++    }
++    REXLOG_INFO("[deko3d] resuelta {} {}x{} leida como textura de punto fijo (signos {:02X}, exp_adjust {}): copia "
++                "convertida", canales == 4 ? "16_16_16_16" : "16_16", resuelta.ancho, resuelta.alto, signos, exp_adjust);
++  }
++  if (c.version != resuelta.version) {
++    if (!Copiar3D(resuelta, 0, 0, resuelta.ancho, resuelta.alto, c.imagen, 0, 0, modos, false,
++                  std::ldexp(1.0f, exp_adjust))) {
++      return nullptr;
++    }
++    OlvidarEstado();
++    c.version = resuelta.version;
++    ++c.imagen.version;
++  }
++  return &c.imagen;
++}
++
+ const ImagenDk* RenderDk::ResueltaRecortada(const ImagenDk& resuelta, uint32_t ancho, uint32_t alto) {
+   if (recortadas_.size() > 64) {  // resolves recreated at other sizes leave theirs behind
+     for (auto& [clave, c] : recortadas_) {
+@@ -557,6 +597,25 @@
+       // The emulation's copy swaps channels in memory (copy_dest_swap) and the fetch swizzle undoes it; here the copy
+       // is image to image, so the swap goes into the host channels.
+       const uint16_t host = resuelta->intercambio_rb ? kSwizzleBGRA : kSwizzleRGBA;
++      // A k_16_16 / k_16_16_16_16 target (fixed point, -32..32) read back as a texture of its format: the hardware
++      // returns its 16 bits as a normalized integer (unsigned: about value / 64; signed: value / 32), scaled by the
++      // fetch constant's exp_adjust (dword 3, bits 13-18). Gears of War 2's velocity buffer is read with exp_adjust
++      // such that it gets the value back; Dead Space 3's deferred lighting buffer (k_16_16_16_16, read unsigned and
++      // x 8 in its material shaders) must come out as the hardware gives it, or every lit surface is washed out.
++      const int32_t exp_adjust = int32_t(f[3] << 13) >> 26;  // bits 13-18, signed
++      if ((f[1] & 0x3F) == 25 && resuelta->formato == DkImageFormat_RG16_Float && REXCVAR_GET(nfsmw_dk_16_16_fijo)) {
++        if (const ImagenDk* convertida = ResueltaFija16(*resuelta, signos, 2, exp_adjust)) {
++          return VistaDe(*convertida, swizzle, host);
++        }
++      }
++      // The same with four channels: Dead Space 3's deferred lighting buffer, a k_16_16_16_16 target the material pass
++      // reads back unsigned (x 8 in its shader). Read as the float it holds, every lit surface came out ~64 times too
++      // bright: white, washed out, armour like chrome.
++      if ((f[1] & 0x3F) == 26 && resuelta->formato == DkImageFormat_RGBA16_Float && REXCVAR_GET(nfsmw_dk_16_16_fijo)) {
++        if (const ImagenDk* convertida = ResueltaFija16(*resuelta, signos, 4, exp_adjust)) {
++          return VistaDe(*convertida, swizzle, host);
++        }
++      }
+       if (signos) {
+         // Signed or biased channels: a converted copy (Dead Space 2's normal buffer is written as n * 0.5 + 0.5 into an
+         // 8_8_8_8 target and read back biased, so its lights had every normal positive). All gamma: an sRGB view.

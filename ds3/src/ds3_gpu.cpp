@@ -1184,13 +1184,14 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     // and one whose VS was not identified, taken for a clear, wiped the stencil and let a light flood the screen.
     // A single-sampled full-surface draw without an identified VS is usually a real draw (the lamps' 64x8 visibility
     // pass is one, and clearing for it wiped the scene's depth in the middle of the frame). Single-sampled, only
-    // Direct3D's own clear shape is taken: one rectangle (rect list, 3 vertices) with all four targets' mask. The
+    // Direct3D's own clear shape is taken: rectangles (rect list, 3 vertices each) with all four targets' mask. The
     // decompression scene clears its quarter-size particle buffer that way every frame; left as it was, the smoke and
     // debris of every frame piled up into grey smears. And only onto an 8-bit color target with a color in 0..1 in the
     // clear shader's c0: the same shape also fills the 80-wide float exposure target with game data (c0 like 0.027 0
     // -18.4 1), which is not a clear.
     const uint32_t initiator = Register(g::XE_GPU_REG_VGT_DRAW_INITIATOR);
-    bool rect_clear = !msaa && (initiator & 0x3F) == 8 && (initiator >> 16) == 3 &&
+    // Rectangles of 3 vertices each: Dead Space 3 clears its half-size (640-pitch) targets with two in one draw.
+    bool rect_clear = !msaa && (initiator & 0x3F) == 8 && (initiator >> 16) >= 3 && (initiator >> 16) % 3 == 0 &&
                       Register(g::XE_GPU_REG_RB_COLOR_MASK) == 0xFFFF &&
                       ((Register(g::XE_GPU_REG_RB_COLOR_INFO) >> 16) & 0xF) <= 1;
     for (uint32_t j = 0; j < 4 && rect_clear; ++j) {
@@ -1610,14 +1611,15 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
                   (w1 >> 13) & 1, (w2 & 0xFF) * 4, ((w2 >> 8) & 0x7FFFFF) * 4);
     }
     // The pixel shader's textures: fetch constant of each sampler (base, format, size, dimension, swizzle, signs).
-    for (size_t i = 0; ps_ && i < ps_->samplers.size() && i < 4; ++i) {
+    for (size_t i = 0; ps_ && i < ps_->samplers.size() && i < 8; ++i) {
       const uint32_t reg = ps_->samplers[i].registro;
       if (reg >= 32) continue;
       const uint32_t* f = &registers_[0x4800 + reg * 6];
-      REXLOG_INFO("[draws]       s{} tipo {}: base {:08X} fmt {} {}x{} dim {} swz {:03X} signs {:02X} tiled {} type {}",
+      REXLOG_INFO("[draws]       s{} tipo {}: base {:08X} fmt {} {}x{} dim {} swz {:03X} signs {:02X} tiled {} type {} "
+                  "exp {}",
                   reg, ps_->samplers[i].tipo, f[1] & 0xFFFFF000u, f[1] & 0x3F, (f[2] & 0x1FFF) + 1,
                   ((f[2] >> 13) & 0x1FFF) + 1, (f[5] >> 9) & 0x3, (f[3] >> 1) & 0xFFF, (f[0] >> 2) & 0xFF,
-                  (f[0] >> 31) & 1, f[0] & 0x3);
+                  (f[0] >> 31) & 1, f[0] & 0x3, int32_t(f[3] << 13) >> 26);
     }
   }
 

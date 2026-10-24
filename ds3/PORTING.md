@@ -157,4 +157,17 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
 - The unknown-VS draws (still ~7 %, IM_LOAD_IMMEDIATE: Direct3D's own shaders, not from the hooked creation calls)
   now log their state (primitive, mask, formats, c0) once each; the frame dump and draw trace come back with
   ds2-nx's `ds3_gpu.cpp` under `DS3_DEPURACION` (ON while the port is brought up).
+- Run 7 (much faster; rendering wrong: washed-out, "half transparent" surfaces, armour like chrome, missing detail such
+  as mouths): 10 frame dumps with full draw traces. The frame: G-buffer (normals 0C666000, depth 09DF8000), light
+  volumes into the deferred lighting buffer 0BE50000 (k_16_16_16_16, looked right in the dump), then the material pass
+  (406 draws) reads it back unsigned and multiplies it by 8 (`ps_0f5c3c863fdb728f`: `r6 = r8 * 8`). The renderer
+  handed the shader the float the target holds; the hardware returns the target's fixed-point bits (value x 1024,
+  -32..32) as a normalized integer, about value / 64, times 2^exp_adjust of the fetch constant. `sdk-patches/0018`
+  (gears2-nx's 0035, 0036 and 0046, extended): 16_16 and 16_16_16_16 targets read back as such are converted the way the
+  hardware returns them, with the fetch's exp_adjust (which gears2-nx's velocity buffer read showed is set to undo the
+  scale there), and resolves apply copy_dest_exp_bias. The draw trace now prints each sampler's exp_adjust, and the
+  first conversion logs it, to confirm on the next run.
+- Also from run 7: Direct3D clears with two rectangles in one draw (6 vertices, the 640-pitch half-size targets) were
+  skipped as "VS not identified" and left the previous frames in those targets; any multiple of 3 vertices is a
+  clear now. The other unidentified VS is a single point with color writes off (a fence-like draw): harmless.
 
