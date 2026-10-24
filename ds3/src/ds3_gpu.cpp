@@ -1383,6 +1383,12 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     const std::vector<uint32_t>& m = vs_microcode_;
     if (m.size() != 27 || m[0] != 0x30052003 || m[9] != 0x30081000 || (m[11] & 0xFF) != 7 || m[12] != 0x00080000 ||
         ((m[13] >> 16) & 0x3F) != 38 || ((m[14] >> 8) & 0x7FFFFF) != 3) {
+      // Which clear shaders do not carry their color this way (their first fetch words), once each.
+      const uint64_t firma = m.size() > 14 ? (uint64_t(m[9]) << 32) | m[11] : m.size();
+      if (clear_vs_unread_.size() < 8 && clear_vs_unread_.insert(firma).second) {
+        REXLOG_WARN("[gpu] clear color not read from its vertices: VS of {} words, fetch {:08X} {:08X} {:08X}",
+                    m.size(), m.size() > 9 ? m[9] : 0, m.size() > 11 ? m[11] : 0, m.size() > 14 ? m[14] : 0);
+      }
       return false;
     }
     const uint32_t f0 = registers_[0x4800], f1 = registers_[0x4801];
@@ -1396,14 +1402,22 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
       std::memcpy(&color[j], &bits, 4);
       if (!std::isfinite(color[j])) return false;
     }
-    if (clear_colors_logged_ < 8) {
+    // Every new color per target (the first 64): whether the game clears its scene to the fog color in the blizzard.
+    const uint32_t destino = Register(rex::graphics::XE_GPU_REG_RB_COLOR_INFO) & 0xFFF;
+    uint32_t empaquetado;
+    std::memcpy(&empaquetado, &color[0], 4);
+    empaquetado ^= uint32_t(std::lround(color[1] * 255)) << 8 ^ uint32_t(std::lround(color[2] * 255)) << 16;
+    if (clear_colors_logged_ < 64 && clear_colors_seen_[destino] != empaquetado + 1) {
+      clear_colors_seen_[destino] = empaquetado + 1;
       ++clear_colors_logged_;
       REXLOG_INFO("[gpu] clear color from its vertices: {:.3f} {:.3f} {:.3f} {:.3f} (target c0 {:03X})", color[0],
-                  color[1], color[2], color[3], Register(rex::graphics::XE_GPU_REG_RB_COLOR_INFO) & 0xFFF);
+                  color[1], color[2], color[3], destino);
     }
     return true;
   }
   uint32_t clear_colors_logged_ = 0;
+  std::unordered_map<uint32_t, uint32_t> clear_colors_seen_;  // target base -> last color logged (+1)
+  std::unordered_set<uint64_t> clear_vs_unread_;
 
   void EmulateClear(uint32_t msaa) {
     namespace g = rex::graphics;

@@ -316,3 +316,11 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   read the new value. Now the register is copied before the vector line when the scalar reads the register the
   vector writes (552 of 1,179 shaders have such an instruction, some harmless; among them the terrain and rock
   materials n489, n1086, n959, the composite n245, the sun shadow mask n155 and the blizzard sheets' VS n521).
+- Run 24 (shaders with the co-issue fix): the fire glows are dimmer but still show through rock; the black shapes
+  in the blizzard are not geometry: where they are the G-buffer holds no surface (sky), and nothing draws there but
+  the sky dome (faded out by its vertex alpha in the storm, as it should be), so the material target's clear color
+  shows. Whether the game clears it to its fog color there is not known yet: the clear-color log only covered the
+  first 8 clears (at boot). Build 30 logs every new clear color per target, and the clear shaders whose color is
+  not read from their vertices. The glows: the 64x8 lamp visibility read back to the CPU says those fires are visible
+  (0.85-1.0), so the visibility test itself passes them; to check whether 540p is involved (the CPU computes each
+  lamp's screen position for that test), the same spot is to be tried at 720p.
