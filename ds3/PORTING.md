@@ -186,4 +186,13 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   frame from the caller's r1. Fixed (edges from each switch line to its case/default labels; 43 functions change, no
   REF/MOD/LIVEOUT change). The same gap exists in the ds2-nx, dantes-inferno-nx and gears2-nx copies of the pass. Next:
   a new check build. (Also: the call-chain walk of sdk-patches/0019 can fault on itself past the stack's top.)
+- Run 12: the raw texture dump (`ds3/tools/decode_texture_dump.py`, `--montage`) shows every texture intact in guest
+  memory (faces, teeth, eyes, armour, rock), all linear DXT1/DXT5 with mips; the draws using them draw. The defects the
+  user pointed at (a see-through player with the health bar on his back showing through, holes in the ground,
+  untextured distant mountains, the menu's projector missing) are a depth mismatch: DS3 draws each mesh twice, the
+  G-buffer pass (writes depth, LEQUAL) and the material pass (LEQUAL, no depth write) with another vertex shader; on the
+  Xbox 360 both give the same depth bit for bit, here two separately compiled shaders differ in the last bit and the
+  material pass fails on part of the pixels. `sdk-patches/0021` (gears2-nx's 0029) pulls such passes 4 depth units
+  towards passing, only for passes that do not write depth (the G-buffer pass writes it with the same function, and
+  pulling both cancelled out).
 

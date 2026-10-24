@@ -1,0 +1,37 @@
+--- a/src/x360/deko/dibujos.cpp
++++ b/src/x360/deko/dibujos.cpp
+@@ -60,6 +60,10 @@
+                     "Quitar el desenfoque radial de la composicion final. Son 7 de los 12 muestreos del "
+                     "unico cuadrilatero a pantalla completa del posproceso (1,5-2,0 ms reales). Se pierde "
+                     "el difuminado de los bordes al acelerar y con el NOS: la imagen queda mas nitida");
++REXCVAR_DEFINE_BOOL(nfsmw_dk_sesgo_igualdad, true, "NFSMW",
++                    "deko3d: los dibujos de color que prueban la profundidad con GEQUAL o LEQUAL sin sesgo propio se "
++                    "acercan 4 unidades: pasan donde un pase previo de solo profundidad escribio la misma superficie "
++                    "con otro vertex shader (Gears of War 2: sin esto la escena salia negra)");
+ REXCVAR_DEFINE_BOOL(nfsmw_nativo_z_temprana, true, "NFSMW",
+                     "Renderizador nativo (20/09): en los dibujos que prueban la profundidad pero NO la "
+                     "escriben (humo, particulas, cristales, calcomanias), declarar EarlyFragmentTests en el "
+@@ -1237,6 +1241,23 @@
+     sesgo[0] = float(REXCVAR_GET(nfsmw_nativo_sombras_sesgo_constante)) * 1000.0f;
+     sesgo[1] = float(REXCVAR_GET(nfsmw_nativo_sombras_sesgo_pendiente)) * 0.1f;
+   }
++  // A depth prepass and a color pass over the same surface (Gears of War 2: depth only, then the base pass with
++  // GEQUAL and its own vertex shader). On the Xbox 360 both give the same depth bit for bit; here two separately
++  // compiled vertex shaders may differ in the last bit and the color pass fails where it should pass. Pulled 4 units
++  // towards passing (nfsmw_dk_sesgo_igualdad), only when the game set no bias of its own.
++  // Only passes that test depth without writing it: Dead Space 3's G-buffer pass is a color pass that writes depth
++  // with LEQUAL too, and pulling it as well cancelled the pull of its material pass (which re-draws the same geometry
++  // with LEQUAL and no depth write, through another vertex shader): half its pixels failed and the scene behind showed
++  // through (a "transparent" player, holes in the ground, untextured mountains).
++  if (REXCVAR_GET(nfsmw_dk_sesgo_igualdad) && tipo >= 4 && modo_edram == uint32_t(xenos::EdramMode::kColorDepth) &&
++      sesgo[0] == 0.0f && sesgo[1] == 0.0f && (control_profundidad & 0x2) && !(control_profundidad & 0x4)) {
++    const uint32_t funcion_z = (control_profundidad >> 4) & 0x7;
++    if (funcion_z == 6) {
++      sesgo[0] = 4.0f;  // GEQUAL
++    } else if (funcion_z == 3) {
++      sesgo[0] = -4.0f;  // LEQUAL
++    }
++  }
+   const bool con_sesgo = sesgo[0] != 0.0f || sesgo[1] != 0.0f;
+ 
+   // --- Vertex range and indices
