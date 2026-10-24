@@ -124,4 +124,17 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   branch targets), the game is a guest module linked into the NRO (rexglue-sdk-nx's `rexglue_switch_link_module`,
   from fc3-nx), the hooks on game functions build inside that module, and `XamSwapDisc` goes through a handler the
   SDK gains in `sdk-patches/0014`. Built (NRO 65 MB, 890 steps) and copied to the console; run 2 pending.
+- 2026-10-24, run 3: default.xex ran and loaded the DLL, but its code was not wired: the loader's path
+  (`device/ds3titleupdate/deadspace_game_f.xex`, game: remapped to the title update folder) did not match the
+  manifest's `guest_path`. `sdk-patches/0015` falls back to the file name and logs whether a module was wired.
+- Run 4: the game runs. "Recompiled module 'deadspace_game_f.xex' wired", 54,884 functions, the GPU ring starts, audio
+  starts, 1,179 shader containers dumped (all at startup, 2008 format `0x102A1100/01`), a few frames of clears and
+  resolves (1152x720 targets), then no more GPU work after `Call to invalid or unregistered function at 0x88981840`:
+  an 8-instruction virtual function in a gap between two generated functions. `tools/find_code_gaps.py` finds 70 such
+  gaps (code between functions, ending in blr/bctr/b; none is pointed to from the loaded image, so their vtables are
+  filled at run time) and they are named `gap_*` in `names.toml` (it needs the DLL's image: run `rexglue codegen` with
+  `REX_DUMP_IMAGE` on a manifest whose entry point is deadspace_game_f.xex). Splitting at them added 39 branch targets.
+- Shaders: 1,179 translated after one fix: the translator passes `NAME_InvTamano` to `getWeights2D` too (103 shadow
+  filter shaders), and `shader_common.h` gets that overload. 10,083 DKSH variants precompiled. Black screen in run 4
+  was this (no library: every draw skipped, "VS not identified") and the stop above.
 

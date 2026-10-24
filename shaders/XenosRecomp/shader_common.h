@@ -139,6 +139,18 @@ float2 getWeights2D(Texture2D<float4> texture, SamplerState samplerState, float2
     return select(isnan(texCoord), 0.0, frac(texCoord * getTexture2DDimensions(texture) + offset - 0.5));
 }
 
+// getWeights2D for a 2D register whose size the game also passes (the translator adds NAME_InvTamano after the
+// offset, as for tfetch2D): Dead Space 3's shadow filters ask for the bilinear weights this way.
+float2 getWeights2D(Texture2D<float4> texture, SamplerState samplerState, float2 texCoord, float2 offset, float2 invSize)
+{
+    float2 tamano;
+    [branch] if (g_SpecConstants() & SPEC_CONSTANT_INV_TAMANO_TEX)
+        tamano = 1.0 / invSize;
+    else
+        tamano = getTexture2DDimensions(texture);
+    return select(isnan(texCoord), 0.0, frac(texCoord * tamano + offset - 0.5));
+}
+
 float w0(float a)
 {
     return (1.0f / 6.0f) * (a * (a * (-a + 3.0f) - 3.0f) + 1.0f);
