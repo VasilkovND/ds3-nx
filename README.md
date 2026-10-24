@@ -30,8 +30,8 @@ scene size when it starts, so a new choice applies **at the next start**:
 | **540p** | stock clocks (default otherwise) | 864x540, upscaled to the screen |
 
 In handheld mode the port asks Horizon for its handheld performance profile with the GPU at 460.8 MHz (one that
-commercial games use, not an overclock; CPU and memory clocks are not raised). Docked, or with sys-clk setting the
-clocks, nothing changes. `ds3_gpu_portatil_mhz = 0` in `ds3.toml` leaves the stock 307.2 MHz.
+commercial games use, not an overclock; CPU and memory clocks are not raised). Docked, or on an overclocked console (CPU
+above 1020 MHz at start), it asks for nothing. `ds3_gpu_portatil_mhz = 0` in `ds3.toml` leaves the stock 307.2 MHz.
 
 **`ds3.toml`** beside the NRO sets the port's options (`name = value` lines). For bug reports:
 `ds3_atajos_depuracion = true` turns on the debug shortcuts (ZL + ZR held with the D-pad: capture, frame dump and draw
