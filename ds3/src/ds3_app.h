@@ -19,6 +19,7 @@
 #include <rex/rex_app.h>
 #include <rex/runtime.h>
 #include <rex/system.h>
+#include <rex/ui/overlay/achievement_notification.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -101,6 +102,15 @@ class Ds3App : public rex::ReXApp {
     } catch (const std::exception& error) {
       Fail(std::string("Dead Space 3: ") + error.what());
     }
+  }
+
+  // No achievement toast. Its ImGui dialog, created with the first achievement (the end of the prologue), is a UI
+  // drawer for the rest of the session, and with one the presenter paints from the UI thread on request: from that
+  // moment (run 17) the screen stayed black with the sound going, then flickered. The achievement is still unlocked
+  // and saved.
+  std::unique_ptr<rex::ui::AchievementNotificationDialog> CreateAchievementNotificationDialog() override {
+    REXLOG_INFO("ds3: achievement toast off (it would move presentation to the UI thread)");
+    return nullptr;
   }
 
  private:

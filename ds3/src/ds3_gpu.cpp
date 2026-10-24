@@ -1375,6 +1375,36 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
   // (to 0); c1-c3 on another base than c0 clear the depth buffer at their base (far plane, stencil 0); the bound
   // depth target is cleared only when depth or stencil is written and it is not on c0's base; depth-only mode
   // clears no color. The first few are logged with what the game had set, to check.
+  // The color of a Direct3D clear as its own shaders produce it. Dead Space 3's clear VS (27 words, first
+  // 30052003 00001200 C4000000) fetches each vertex from fetch constant 0.0, stride 7 dwords: the position
+  // (32_32_32_FLOAT) and at dword 3 the color (32_32_32_32_FLOAT, into r0, which PS n198 outputs). false if the VS
+  // is not that one or the fetch constant does not point at vertices.
+  bool ClearColorFromVertices(float color[4]) {
+    const std::vector<uint32_t>& m = vs_microcode_;
+    if (m.size() != 27 || m[0] != 0x30052003 || m[9] != 0x30081000 || (m[11] & 0xFF) != 7 || m[12] != 0x00080000 ||
+        ((m[13] >> 16) & 0x3F) != 38 || ((m[14] >> 8) & 0x7FFFFF) != 3) {
+      return false;
+    }
+    const uint32_t f0 = registers_[0x4800], f1 = registers_[0x4801];
+    if ((f0 & 0x3) != uint32_t(xenos::FetchConstantType::kVertex) || ((f1 >> 2) & 0xFFFFFF) < 7) return false;
+    const uint32_t address = (f0 & ~uint32_t(0x3)) + 3 * 4;
+    const uint8_t* data = memory_->TranslatePhysical(address);
+    for (uint32_t j = 0; j < 4; ++j) {
+      uint32_t bits;
+      std::memcpy(&bits, data + j * 4, 4);
+      bits = xenos::GpuSwap(bits, static_cast<xenos::Endian>(f1 & 0x3));
+      std::memcpy(&color[j], &bits, 4);
+      if (!std::isfinite(color[j])) return false;
+    }
+    if (clear_colors_logged_ < 8) {
+      ++clear_colors_logged_;
+      REXLOG_INFO("[gpu] clear color from its vertices: {:.3f} {:.3f} {:.3f} {:.3f} (target c0 {:03X})", color[0],
+                  color[1], color[2], color[3], Register(rex::graphics::XE_GPU_REG_RB_COLOR_INFO) & 0xFFF);
+    }
+    return true;
+  }
+  uint32_t clear_colors_logged_ = 0;
+
   void EmulateClear(uint32_t msaa) {
     namespace g = rex::graphics;
     AliasScope alias(*this);
@@ -1426,7 +1456,16 @@ class RingGraphicsSystem final : public rex::system::IGraphicsSystem {
     // The color: the multisampled ones were all seen clearing to 0. A single-sampled one takes what Direct3D's clear
     // shader writes, the pixel shader's c0 (RGBA8 for the renderer's clear).
     uint32_t color = 0;
-    if (!msaa) {
+    float vertex_color[4];
+    const bool target_8bit = ((base.rb_color_info[0] >> 16) & 0xF) <= 1;
+    if (target_8bit && ClearColorFromVertices(vertex_color)) {
+      // Dead Space 3's Direct3D clear: its PS (n198) outputs the interpolated vertex color, and the VS fetches it
+      // from the clear's own vertices; PS c0 holds whatever the game left there (the material target's clear came
+      // out black instead of the blizzard's fog color: a black sky behind the snow).
+      for (uint32_t j = 0; j < 4; ++j) {
+        color |= uint32_t(std::lround(std::clamp(vertex_color[j], 0.0f, 1.0f) * 255.0f)) << (j * 8);
+      }
+    } else if (!msaa) {
       for (uint32_t j = 0; j < 4; ++j) {
         float v;
         std::memcpy(&v, &registers_[0x4400 + j], 4);

@@ -237,3 +237,23 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   2-10 ms a frame while the ring thread records. Left for later: the geometry cache trusting stable ranges (risk of
   a stale pose on CPU-skinned meshes for a few frames), sleeping in Direct3D's GPU wait (needs a codegen run),
   LOCALREGS.
+- Run 17 (build 21): the user reports every texture right now. Left: (a) after the prologue the screen stayed black
+  with the sound going, then flickered; (b) at the start the blizzard does not hide the sky (black behind the
+  snow); (c) small bright artifacts on the shoulders and along shadows; (d) occasional hitches with audio stutter.
+  - (a) The level did load: the traces after the prologue are complete frames (600 G-buffer draws, lights,
+    materials, post). The log shows the moment: the first achievement unlocks at 16:03:03 and in the same
+    millisecond the presenter switches to "UI thread, on request, 1 UI drawer". That drawer is the SDK's achievement
+    toast (an ImGui dialog created with the first event and kept for the session); with any UI drawer the presenter
+    paints from the UI thread on request (the SDK's own comment in rex_app.cpp: frames halved), and here the screen
+    went black, then flickered. `Ds3App::CreateAchievementNotificationDialog` returns none: achievements still unlock
+    and are saved, without the toast.
+  - (b) Direct3D's clear in Dead Space 3 takes its color from its own vertices: the clear VS (27 words, first
+    30052003, found at 0x8801CF58 in the module) fetches 7 floats per vertex from fetch constant 0.0, xyz and the
+    color, and PS n198 outputs that color. `EmulateClear` took PS c0 (Dead Space 2's way), which here holds game
+    constants (1/1152, 1/720...): the material target was cleared to black, the color the blizzard's sky shows
+    through. The color is now read from the clear's vertices (logged for the first eight).
+  - (c) The shadow mask's edge pass (PS n633) and its depth-aware upsample (PS n476) are if/else shaders: a jump to
+    the else part when !p0 and, at the end of the then part, a jump over it. Their ranges cross, and the translator's
+    nested `if`s closed the first at the second's target: the else part sat inside the then part and never ran. The
+    upsample's edge pixels kept their texture coordinates as their color (the bright dashes along every depth edge
+    in the full-size mask). Crossing jumps now make the translator use its `pc` form; only n476 and n633 change.

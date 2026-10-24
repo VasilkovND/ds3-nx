@@ -1513,6 +1513,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
     // Forward jumps only (no loop, no jump back): see saltosLineales.
     bool soloHaciaDelante = true;
     uint32_t indiceCf = 0;
+    // Each conditional jump of the simple control flow becomes an `if` from the jump to its target. Two whose ranges
+    // cross cannot nest: an if/else (jump to the else when !p0, and at the end of the then part a jump over the
+    // else) closed the first `if` at the second one's target, so the else part ran inside the then part, never.
+    // Dead Space 3's shadow mask upsample (PS n476) left its edge pixels with the texture coordinates as their color.
+    std::vector<std::pair<uint32_t, uint32_t>> rangosSalto;
 
     while (instrAddress < instrSize)
     {
@@ -1549,7 +1554,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
                 if (cfInstr.condJmp.isUnconditional || cfInstr.condJmp.direction)
                     simpleControlFlow = false;
                 else
+                {
                     ++ifEndLabels[cfInstr.condJmp.address];
+                    rangosSalto.emplace_back(indiceCf, uint32_t(cfInstr.condJmp.address));
+                }
 
                 if (cfInstr.condJmp.address <= indiceCf)
                     soloHaciaDelante = false;
@@ -1570,6 +1578,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
         controlFlowCode += 3;
         instrAddress += 12;
     }
+
+    for (const auto& [desde1, hasta1] : rangosSalto)
+        for (const auto& [desde2, hasta2] : rangosSalto)
+            if (desde1 < desde2 && desde2 < hasta1 && hasta1 < hasta2)
+                simpleControlFlow = false;
 
     /*
      * saltosLineales: jumps the translator could not nest (an unconditional jump, the end of an `if` branch) are
