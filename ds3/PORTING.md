@@ -278,3 +278,13 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   (`sdk-patches/0028`, no ImGui, which moves presentation to the UI thread) and the game sees the controller idle
   while it is open. Also: Direct3D's GPU wait step (0x88A20950) yields, then sleeps 100 us, instead of spinning a
   core (gears2-nx).
+- Run 19 (build 24, stock clocks in handheld: CPU 1020, GPU 307.2, memory 1331 MHz; 540p chosen by default): 30 fps
+  at first, then 21-25 and 15-19 in fights; the sound "lagged unbearably". GPU per frame 38-44 ms at 864x540
+  (scene 22-30, copies 7-8, small passes 2-5): the GPU is the first limit in handheld; in fights it also idled 10-22
+  ms a frame waiting for the CPU. The sound: the two RenderWare Audio mixer threads share 0x3B with the main thread
+  and the job workers, and at 1020 MHz they get their slice too late (run 17's stacks). Build 25: each thread that
+  calls the mixer's leaf loops (src/ds3_audio.cpp) raises itself once to `ds3_prioridad_mezclador` (0x2E, between
+  the game's threads and the ring/XMA threads; they block on their tick event between frames). LOCALREGS on
+  (54,665 functions with registers in locals, 4 left; the NRO 66 -> 55 MB), with its check build
+  (`PLR_CHECK=1`, ds3-nx-check.nro) to run first. sdk-patches/0029: the geometry store's XXH3 inlined (gears2-nx),
+  its "trust stable ranges" off by default (`nfsmw_dk_geometria_confianza` 1: the game skins on the CPU).
