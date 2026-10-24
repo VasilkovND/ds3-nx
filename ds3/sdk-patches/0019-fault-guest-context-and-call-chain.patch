@@ -1,0 +1,40 @@
+--- a/src/system/xmemory.cpp
++++ b/src/system/xmemory.cpp
+@@ -27,6 +27,7 @@
+ #include <rex/stream.h>
+ #include <rex/system/function_dispatcher.h>
+ #include <rex/system/mmio_handler.h>
++#include <rex/system/thread_state.h>
+ #include <rex/system/xmemory.h>
+ #include <rex/thread.h>
+ 
+@@ -571,6 +572,29 @@
+         "Unhandled guest access violation: {} of guest 0x{:08X} (host 0x{:016X}) on thread 0x{:X}",
+         is_write ? "write" : "read", virtual_address, reinterpret_cast<uintptr_t>(host_address),
+         rex::thread::current_thread_id());
++    // The guest registers at the fault (the context the recompiled code keeps in memory): which guest function, from
++    // where, with which stack.
++    if (auto* ts = runtime::ThreadState::Get()) {
++      const PPCContext* c = ts->context();
++      REXSYS_ERROR("  guest context: r1 {:08X} lr {:08X} ctr {:08X} r3 {:08X} r4 {:08X} r5 {:08X} r6 {:08X} r11 {:08X} "
++                   "r12 {:08X} r13 {:08X} r31 {:08X}",
++                   c->r1.u32, uint32_t(c->lr), c->ctr.u32, c->r3.u32, c->r4.u32, c->r5.u32, c->r6.u32, c->r11.u32,
++                   c->r12.u32, c->r13.u32, c->r31.u32);
++      // The guest call chain: each frame's back chain is at 0(r1), and the caller's saved LR 8 bytes below the
++      // previous frame's top (the 360's prologue: stw r12,-8(r1) before stwu). Stops at the first unmapped frame.
++      std::string chain;
++      uint32_t sp = c->r1.u32;
++      for (int i = 0; i < 48 && sp; ++i) {
++        auto* sp_heap = LookupHeap(sp);
++        if (!sp_heap) break;
++        const uint32_t prev = rex::memory::load_and_swap<uint32_t>(TranslateVirtual(sp));
++        if (prev <= sp || !LookupHeap(prev - 8)) break;
++        const uint32_t saved_lr = rex::memory::load_and_swap<uint32_t>(TranslateVirtual(prev - 8));
++        chain += fmt::format(" {:08X}", saved_lr);
++        sp = prev;
++      }
++      REXSYS_ERROR("  guest call chain (saved LRs):{}", chain);
++    }
+     return false;
+   }
+ 
