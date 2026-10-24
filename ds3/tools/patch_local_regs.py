@@ -214,6 +214,8 @@ class Func:
         # For each open brace: whether what is inside may not run (opened by an if/else/switch line), and its line.
         cond_stack = []
         skips = []  # (line opening a conditional block, line closing it): the path that does not run the block
+        switches = []  # the open switch blocks: (line of the switch, depth outside it)
+        cases = {}  # line of a switch -> the lines of its case and default labels (where the jump table goes)
         for i, line in enumerate(body):
             lm = LABEL.match(line)
             if lm:
@@ -266,6 +268,11 @@ class Func:
                         (s.startswith(INDIRECT) and find_indirect(s) == [(0, len(s))]))
                 self.returns[i] = "return;" in code
                 gotos.append((i, GOTO.findall(code)))
+            s = code.strip()
+            if switches and depth == switches[-1][1] + 1 and re.fullmatch(r"(?:case\b.*|default\s*):", s):
+                cases.setdefault(switches[-1][0], []).append(i)
+            if re.fullmatch(r"switch\s*\(.*\)\s*\{", s):
+                switches.append((i, depth))
             conditional = re.search(r"\b(?:if|else|switch|case|default|for|while|do)\b", code) is not None
             for ch in code:
                 if ch == "{":
@@ -275,6 +282,8 @@ class Func:
                     if c and opened != i:
                         skips.append((opened, i))
             depth += code.count("{") - code.count("}")
+            while switches and depth <= switches[-1][1]:
+                switches.pop()
         if depth != 1:
             raise Skip("unbalanced braces")
         # Switch fallback: REX_CALL_INDIRECT_FUNC inside a switch's default.
@@ -299,7 +308,12 @@ class Func:
         # block may also be skipped: an edge from its opening line to its closing one. (Falling through the block's
         # lines alone is not enough: a call in it clears the dirty registers, `if (c) { X(ctx, base); return; }` made
         # the code after the block look clean on the path where c is false, and r1 went unwritten before the next
-        # call there: the callee's frame overwrote this function's saved registers.)
+        # call there: the callee's frame overwrote this function's saved registers.) A switch (a bctr through a jump
+        # table) also goes straight to each of its case and default labels. (Through fall-through alone, a case that
+        # ends in `unresolved_target_X(ctx, base); return;` cleared the dirty registers for every case after it: in
+        # the Havok MOPP ray query, sub_88D57180, whose case 0 is such a tail call, the code behind the other cases
+        # tail-called its own epilogue with r1, lr and the non-volatiles unwritten, and the epilogue popped the frame
+        # from the caller's r1; the check build faulted at 0x5E5304A3 with the caller's r1, lr and poison in ctx.)
         gmap = dict(gotos)
         skipmap = {}
         for a, b in skips:
@@ -310,6 +324,7 @@ class Func:
                                                                s.count(";") == 1))
             succ = [] if term else [i + 1]
             succ.extend(b for b in skipmap.get(i, ()) if b not in succ)
+            succ.extend(c for c in cases.get(i, ()) if c not in succ)
             for g in gmap.get(i, ()):
                 if g not in labels:
                     raise Skip("goto to unknown label " + g)

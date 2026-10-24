@@ -179,4 +179,11 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   the value the resolve wrote, which the hardware also returns for this data path.
 - Frame dumps restart at volcado_00 every session and overwrite the earlier ones file by file: after downloading,
   move them away on the SD (`volcados_previos/`) so the next session's dumps are not mixed with old files.
+- LOCALREGS check build (runs 8-9) faulted at 0x5E5304A3: a real bug in `patch_local_regs.py`, found by a side
+  session. Its control flow had no edge from a `switch` to its case labels, so a case ending in a tail call +
+  `return;` left every later case looking clean; in the Havok MOPP ray query (`sub_88D57180`) the other cases
+  tail-called the function's own epilogue piece with r1, lr and the non-volatiles unwritten, and the epilogue popped a
+  frame from the caller's r1. Fixed (edges from each switch line to its case/default labels; 43 functions change, no
+  REF/MOD/LIVEOUT change). The same gap exists in the ds2-nx, dantes-inferno-nx and gears2-nx copies of the pass. Next:
+  a new check build. (Also: the call-chain walk of sdk-patches/0019 can fault on itself past the stack's top.)
 
