@@ -301,3 +301,9 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   event signal in the game, and the Audio Worker and the XAudio threads (now at 0x2E) spent their time locking,
   waking and sleeping again (Audio Worker 2.4 -> 21.7 %, XAudio 7-19 % each, XMA decoder 12 -> 42 %). 0030 is out
   (build 27); the six audio threads stay raised, which is what fixed the sound.
+- Run 22 (build 27, stock handheld, 540p): the sound is right (no request without data), 26-30 fps, 20-22 in the
+  heaviest fights. GPU 31-37 ms a frame at 307.2 MHz: the GPU is the limit most of the time. Build 28 asks Horizon
+  for the handheld profile 0x92220008 (GPU 460.8 MHz, CPU 1020 and memory 1331.2 unchanged: a profile commercial
+  games use, not an overclock) through the SDK's switch_apm.cpp (`ds3_gpu_portatil_mhz`, 460; 0 = untouched).
+  Left on the CPU in fights: the audio (XMA decoder ~52 % of a core, FFmpeg already NEON; the two busiest mixers ~50 %
+  each), the main thread ~77 %, the ring thread ~52 %.

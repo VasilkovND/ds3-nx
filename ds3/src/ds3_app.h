@@ -42,6 +42,19 @@ REXCVAR_DEFINE_BOOL(ds3_atajos_depuracion, true, "DS3",
                     "pilas con R). false = solo el contador de FPS");
 #endif
 
+#if defined(__SWITCH__)
+#include <rex/ui/switch_apm.h>
+#endif
+// Handheld GPU clock through Horizon's own performance profiles (the ones commercial games pick; no overclock): at
+// stock the handheld GPU runs at 307.2 MHz, and run 22 needed 31-37 ms of GPU per frame at 540p. 460 asks for
+// 0x92220008 (GPU 460.8 MHz, CPU 1020 and memory 1331.2 as before; the SDK's switch_apm.cpp, from the NFS port, tries
+// the pairs that keep the memory clock first and puts it back if it rises). Docked, or with sys-clk setting the
+// clocks, nothing changes.
+REXCVAR_DEFINE_INT32(ds3_gpu_portatil_mhz, 460, "DS3",
+                     "GPU en modo portatil por los perfiles de rendimiento de Horizon: 460 o 384 MHz; 0 = no tocar "
+                     "(307,2 MHz de serie)")
+    .range(0, 460);
+
 REXCVAR_DEFINE_STRING(ds3_disc1, "", "DS3", "Carpeta del disco 1 extraido. Vacio: disc1/ junto al ejecutable.");
 REXCVAR_DEFINE_STRING(ds3_disc2, "", "DS3", "Carpeta del disco 2 extraido. Vacio: disc2/ junto al ejecutable.");
 
@@ -99,6 +112,12 @@ class Ds3App : public rex::ReXApp {
   void OnPreLaunchModule() override {
     ds3::cpu::Configurar();
     ds3::menu::Instalar(*runtime());
+#if defined(__SWITCH__)
+    if (const int32_t mhz = REXCVAR_GET(ds3_gpu_portatil_mhz); mhz > 0) {
+      RexSwitchApmPedirGpuMhz(mhz);
+      RexSwitchApmAplicar();
+    }
+#endif
     try {
       ds3::disc_swap::RegisterImport(*runtime());
     } catch (const std::exception& error) {
