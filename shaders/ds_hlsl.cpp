@@ -114,6 +114,22 @@ int main(int argc, char** argv) try {
       continue;
     }
 
+    // Vertex shaders computed exactly as written (HLSL precise: SPIR-V NoContraction, GLSL precise for uam): no
+    // multiply-add fused in one shader and not in another. Dead Space 3 draws each mesh twice, the G-buffer pass and the
+    // material pass, with two vertex shaders whose position code is the same; the material pass tests LEQUAL against the
+    // G-buffer's depth without writing it. On the Xbox 360 both give the same depth bit for bit; compiled freely here
+    // they differed by a few ULPs, more than a fixed depth bias covers far away: distant rocks and the sky never got
+    // their material pass (black), and skinned characters only partly (see-through).
+    if (e.path().filename().string().rfind("vs_", 0) == 0) {
+      std::string& texto = recompilador.out;
+      auto reemplazar = [&texto](const std::string& de, const std::string& a) {
+        for (size_t p = texto.find(de); p != std::string::npos; p = texto.find(de, p + a.size())) texto.replace(p, de.size(), a);
+      };
+      reemplazar("\n\tfloat4 r", "\n\tprecise float4 r");
+      reemplazar("\n\tfloat ps = 0.0;", "\n\tprecise float ps = 0.0;");
+      reemplazar("\tout float4 oPos : SV_Position", "\tout precise float4 oPos : SV_Position");
+    }
+
     auto destino = salida / e.path().filename();
     destino.replace_extension(".hlsl");
     FILE* f = std::fopen(destino.string().c_str(), "wb");

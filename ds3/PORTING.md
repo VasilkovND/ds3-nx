@@ -195,4 +195,12 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   material pass fails on part of the pixels. `sdk-patches/0021` (gears2-nx's 0029) pulls such passes 4 depth units
   towards passing, only for passes that do not write depth (the G-buffer pass writes it with the same function, and
   pulling both cancelled out).
+- Runs 13-15 against the user's Xbox 360 screenshots of the same scenes: on the console the blizzard washes everything
+  out (distant rocks and the sky barely visible, white snow on the armour); here distant rocks and the sky were black
+  and characters partly see-through, while the G-buffer held the whole scene. The fog is the game's own (VS constants,
+  linear 0.0896 per unit in the prologue). The cause is the depth mismatch above, which grows with distance: a few ULPs
+  of the vertex position are more than a fixed 4-unit bias far away, so the material pass of distant geometry failed
+  everywhere. Fix at the source: vertex shaders are translated with `precise` registers and position
+  (`shaders/ds_hlsl.cpp`: SPIR-V NoContraction, GLSL precise for uam), so the G-buffer and material vertex shaders,
+  whose position code is the same, give the same depth again.
 
