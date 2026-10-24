@@ -27,13 +27,14 @@
 // stock clocks). The same arithmetic on NEON: big-endian floats swapped on load and store, multiply then add (not
 // fused), as vmaddfp.
 
-// ---- The mixer threads' priority. RenderWare Audio's two mixer threads run at Horizon 0x3B, the band of the game's
-// main thread and its job workers; when those keep the cores busy (always at stock clocks) a mixer gets its time
-// slice too late and the frame goes out as silence (run 17: up to 474 frames in 10 s in fights; run 19, at 1020 MHz,
-// the sound "lagged unbearably"). On the Xbox 360 a mixer runs time-critical. The threads that call the mixer's leaf
-// loops below are the mixers: each raises itself once to ds3_prioridad_mezclador, above the game's threads and below
-// the ring thread (0x2C) and the XMA decoder (0x2B). They block on their tick event between frames, so they cannot
-// keep a core from the others.
+// ---- The audio threads' priority. The game's audio threads run at Horizon 0x3B, the band of its main thread and job
+// workers; when those keep the cores busy (always at stock clocks) an audio thread gets its time slice too late and
+// the frame goes out as silence (run 17: up to 474 frames in 10 s in fights; run 19, at 1020 MHz, the sound "lagged
+// unbearably"). On the Xbox 360 they run time-critical. Each raises itself once to ds3_prioridad_mezclador, above the
+// game's threads and below the ring thread (0x2C) and the XMA decoder (0x2B): RenderWare Audio's four mixer threads
+// (their loop, 0x886A8910; build 25 raised only the two that call MixWithGain, and run 20 still lost a third of the
+// frames in fights) and the two XAudio threads the Audio Worker's callback waits on. All of them block on events
+// between frames (60-96 % of their samples in run 20), so they cannot keep a core from the others.
 
 REXCVAR_DEFINE_INT32(ds3_prioridad_mezclador, 0x2E, "DS3",
                      "Prioridad de Horizon de los hilos de mezcla de audio del juego (0x2C-0x3A); 0 = la de los "
@@ -45,7 +46,7 @@ extern "C" bool RexSwitchSetCurrentThreadPriorityOk(int priority);
 #endif
 
 namespace {
-void ElevarMezclador() {
+void ElevarHiloAudio(const char* que) {
   thread_local bool hecho = false;
   if (hecho) return;
   hecho = true;
@@ -53,8 +54,10 @@ void ElevarMezclador() {
   const int32_t prioridad = REXCVAR_GET(ds3_prioridad_mezclador);
   if (prioridad >= 0x2C && prioridad < 0x3B) {
     const bool ok = RexSwitchSetCurrentThreadPriorityOk(prioridad);
-    REXLOG_INFO("[audio] hilo de mezcla a la prioridad 0x{:X}: {}", prioridad, ok ? "hecho" : "FALLO");
+    REXLOG_INFO("[audio] {} a la prioridad 0x{:X}: {}", que, prioridad, ok ? "hecho" : "FALLO");
   }
+#else
+  (void)que;
 #endif
 }
 }  // namespace
@@ -131,7 +134,7 @@ void ConGanancia(uint8_t* dst, const uint8_t* src, float gain, uint32_t n, bool 
 // void MixWithGain(float* dst, float* src, float gain, unsigned count)
 REX_EXTERN(__imp__rw__audio__core__MixWithGain);
 REX_EXTERN(rw__audio__core__MixWithGain) {
-  ElevarMezclador();
+  ElevarHiloAudio("hilo de mezcla");
   if (REXCVAR_GET(ds3_audio_nativo)) {
     ConGanancia(REX_RAW_ADDR(ctx.r3.u32), REX_RAW_ADDR(ctx.r4.u32), float(ctx.f1.f64), ctx.r6.u32, true);
   } else {
@@ -142,10 +145,29 @@ REX_EXTERN(rw__audio__core__MixWithGain) {
 // void CopyWithGain(float* dst, float* src, float gain, unsigned count)
 REX_EXTERN(__imp__rw__audio__core__CopyWithGain);
 REX_EXTERN(rw__audio__core__CopyWithGain) {
-  ElevarMezclador();
+  ElevarHiloAudio("hilo de mezcla");
   if (REXCVAR_GET(ds3_audio_nativo)) {
     ConGanancia(REX_RAW_ADDR(ctx.r3.u32), REX_RAW_ADDR(ctx.r4.u32), float(ctx.f1.f64), ctx.r6.u32, false);
     return;
   }
   __imp__rw__audio__core__CopyWithGain(ctx, base);
+}
+
+// The audio threads' loops: raise the thread, then run the game's own.
+REX_EXTERN(__imp__ds3_rw_audio_MixerThreadLoop);
+REX_EXTERN(ds3_rw_audio_MixerThreadLoop) {
+  ElevarHiloAudio("hilo de mezcla de RenderWare Audio");
+  __imp__ds3_rw_audio_MixerThreadLoop(ctx, base);
+}
+
+REX_EXTERN(__imp__ds3_xaudio_ThreadA);
+REX_EXTERN(ds3_xaudio_ThreadA) {
+  ElevarHiloAudio("hilo de XAudio (A)");
+  __imp__ds3_xaudio_ThreadA(ctx, base);
+}
+
+REX_EXTERN(__imp__ds3_xaudio_ThreadB);
+REX_EXTERN(ds3_xaudio_ThreadB) {
+  ElevarHiloAudio("hilo de XAudio (B)");
+  __imp__ds3_xaudio_ThreadB(ctx, base);
 }

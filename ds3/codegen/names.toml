@@ -45,6 +45,18 @@ name = "ds3_ConfigureDisplay"
 [entrypoint.functions.0x886C6ED8]
 name = "ds3_rw_audio_Compressor1_Process"
 
+# The audio threads' loops (src/ds3_audio.cpp: each raises its thread above the game's once). RenderWare Audio's mixer
+# thread loop (four threads in run 20: two mix through MixWithGain, two through another DSP path) and the two XAudio
+# threads the Audio Worker's callback waits on (thread entries, reached only through the function table).
+[entrypoint.functions.0x886A8910]
+name = "ds3_rw_audio_MixerThreadLoop"
+
+[entrypoint.functions.0x88BD2DE8]
+name = "ds3_xaudio_ThreadA"
+
+[entrypoint.functions.0x88BD2E48]
+name = "ds3_xaudio_ThreadB"
+
 # RenderWare Audio's mixer leaf loops (src/ds3_audio.cpp: NEON versions), byte for byte Dead Space 2's.
 [entrypoint.functions.0x886BE8E8]
 name = "rw__audio__core__MixWithGain"

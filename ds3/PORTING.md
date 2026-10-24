@@ -288,3 +288,11 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   (54,665 functions with registers in locals, 4 left; the NRO 66 -> 55 MB), with its check build
   (`PLR_CHECK=1`, ds3-nx-check.nro) to run first. sdk-patches/0029: the geometry store's XXH3 inlined (gears2-nx),
   its "trust stable ranges" off by default (`nfsmw_dk_geometria_confianza` 1: the game skins on the CPU).
+- Run 20 (build 25, stock handheld, 540p, LOCALREGS): stable, 26-29 fps calm and 20-22 in fights with the three cores
+  at 304-312 %; the sound still lost up to a third of its frames in fights (1,359 of ~4,100 requests in 10 s without
+  data). Stacks: the two raised mixers wait 70 % of the time (not short of CPU); two more RenderWare mixer threads
+  (the same loop, 0x886A8910, through another DSP path, never calling MixWithGain) and the two XAudio threads the
+  Audio Worker's callback waits on (0x88BD2DE8, 0x88BD2E48) stayed at 0x3B with the game. Build 26 raises all six at
+  their loops (src/ds3_audio.cpp). The Audio Worker's callback spent 97 % in WaitMultiple's 1 ms sleeps:
+  sdk-patches/0030 wakes a sleeping WaitMultiple on any signal (the 1 ms slice stays as the fallback; the objects'
+  own waits and signals unchanged).
