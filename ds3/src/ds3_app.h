@@ -85,6 +85,10 @@ class Ds3App : public rex::ReXApp {
     // The SDK sends the controllers zero vibration unless input_vibracion is on; on, the game's own vibration setting
     // decides (ds2-nx 1.2.2). ds3.toml can still turn it off.
     DefaultFlag("input_vibracion", "true");
+    // The game's vibration is for the Xbox 360 pad's motors; the Switch's HD Rumble at the same amplitude is far
+    // stronger, so half by default (sdk-patches/0032; the options menu changes it and keeps the choice in
+    // ds3_vibracion.txt).
+    DefaultFlag("input_vibracion_fuerza", "0.5");
 #if defined(__SWITCH__)
     REXCVAR_SET(switch_atajos_depuracion, REXCVAR_GET(ds3_atajos_depuracion));
 #endif
