@@ -64,8 +64,9 @@ endfunction()
 ds3_add_hook(src/ds3_shader_dump.cpp ds3_D3DDevice_CreateVertexShader ds3_D3DDevice_CreatePixelShader
              ds3_XGRegisterVertexShader ds3_XGRegisterPixelShader)
 ds3_add_hook(src/ds3_audio.cpp rw__audio__core__MixWithGain rw__audio__core__CopyWithGain
-             ds3_rw_audio_Compressor1_Process ds3_rw_audio_MixerThreadLoop ds3_xaudio_ThreadA ds3_xaudio_ThreadB)
-ds3_add_hook(src/ds3_game_cpu.cpp ds3_SetThreadPriority ds3_D3D_GpuWaitStep)
+             ds3_rw_audio_Compressor1_Process ds3_rw_audio_MixerThreadLoop ds3_xaudio_ThreadA ds3_xaudio_ThreadB
+             rw__audio__core__StreamPool__AcquireStream)
+ds3_add_hook(src/ds3_game_cpu.cpp ds3_SetThreadPriority ds3_D3D_GpuWaitStep ds3_D3DDevice_SetGammaRamp)
 ds3_add_hook(src/ds3_resolution.cpp ds3_ConfigureDisplay)
 ds3_setup_game_module(ds3 ds3_deadspace_game_f ${DS3_GAME_HOOKS})
 

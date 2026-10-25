@@ -366,3 +366,7 @@ then one pass for all files in disc order): the 8.7 GB ISO never has to be unpac
   again, the fires no longer glow through rock. 83 % of the occlusion queries are answered with a GPU count (the rest,
   the first time a structure is used, with the fixed one), 0 without room; 29.8 fps on average over the gameplay
   intervals (the lowest 23.4, a fight). Released as 1.0.0.
+- Fixes from ds2-nx 1.2.2 (build 35, not tested on the console yet): StreamPool::AcquireStream (0x886C1BD8, fuzzy
+  0.961 against DS2's; flags at +60 here) answers "no stream" to a null pool; D3DDevice_SetGammaRamp (0x88A1FBC0, the
+  one Displ_SetGamma 0x8895C6D8 calls; corrected ramp at device +15408, DS2 +15216) hands the ramp to the renderer at
+  the next present; `input_vibracion` defaults to true.

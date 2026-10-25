@@ -1031,3 +1031,15 @@ name = "indirect_88C63608"
 [entrypoint.functions.0x88C63620]
 name = "indirect_88C63620"
 
+
+# RenderWare Audio's StreamPool::AcquireStream (src/ds3_audio.cpp): fuzzy_find.py 0.961 against Dead Space 2's
+# rw::audio::core::StreamPool::AcquireStream; reads the pool's flags at +60 (DS2: +49) on entry, returns 0 for
+# "no stream", which its three callers test (cmplwi r3,0). A null pool now gets that answer (ds2-nx's crash at 0x31).
+[entrypoint.functions.0x886C1BD8]
+name = "rw__audio__core__StreamPool__AcquireStream"
+
+# XDK D3DDevice_SetGammaRamp (src/ds3_game_cpu.cpp): the one Displ_SetGamma (0x8895C6D8, fuzzy 0.933) calls, its body
+# identical to Dead Space 2's 0x8221C480 but for the device offset of the corrected ramp: +15408 here (DS2: +15216),
+# 1536 bytes copied after D3D::GammaRampCorrected (0x88A275C0, an exact match).
+[entrypoint.functions.0x88A1FBC0]
+name = "ds3_D3DDevice_SetGammaRamp"

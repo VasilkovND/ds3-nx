@@ -82,6 +82,9 @@ class Ds3App : public rex::ReXApp {
   }
 
   void OnPostInitLogging() override {
+    // The SDK sends the controllers zero vibration unless input_vibracion is on; on, the game's own vibration setting
+    // decides (ds2-nx 1.2.2). ds3.toml can still turn it off.
+    DefaultFlag("input_vibracion", "true");
 #if defined(__SWITCH__)
     REXCVAR_SET(switch_atajos_depuracion, REXCVAR_GET(ds3_atajos_depuracion));
 #endif
@@ -142,6 +145,12 @@ class Ds3App : public rex::ReXApp {
   }
 
  private:
+  // A flag's value unless ds3.toml (or the command line) already set it.
+  static void DefaultFlag(const char* name, const char* value) {
+    if (!rex::cvar::GetFlagInfo(name) || rex::cvar::GetFlagSource(name) != rex::cvar::Source::kDefault) return;
+    rex::cvar::SetFlagByName(name, value);
+  }
+
   [[noreturn]] static void Fail(const std::string& msg) {
     REXLOG_ERROR("{}", msg);
     rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error, msg);

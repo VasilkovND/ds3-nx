@@ -13,6 +13,7 @@
 
 #include "ds3_pch.h"
 
+#include <atomic>
 #include <cstring>
 
 #include <rex/cvar.h>
@@ -170,4 +171,27 @@ REX_EXTERN(__imp__ds3_xaudio_ThreadB);
 REX_EXTERN(ds3_xaudio_ThreadB) {
   ElevarHiloAudio("hilo de XAudio (B)");
   __imp__ds3_xaudio_ThreadB(ctx, base);
+}
+
+// StreamPool::AcquireStream(pool, ...) returns a free stream of the pool, or 0 when it has none (its three callers take
+// that path: the sound does not start). In Dead Space 2, SndPlayer1::PlayHandler passed 0 when no pool matched a
+// sound's codec, AcquireStream read the pool's flags (+0x31 there, +0x3C here) and the game crashed after sleep and on
+// some loads (ds2-nx 1.2.2). Same RenderWare Audio here: a null pool gets "no stream", logged.
+namespace {
+std::atomic<uint32_t> g_pools_nulos{0};
+}  // namespace
+
+REX_EXTERN(__imp__rw__audio__core__StreamPool__AcquireStream);
+REX_EXTERN(rw__audio__core__StreamPool__AcquireStream) {
+  if (ctx.r3.u32 == 0) {
+    const uint32_t n = g_pools_nulos.fetch_add(1) + 1;
+    if (n <= 5 || (n & (n - 1)) == 0) {
+      REXLOG_WARN("[audio] StreamPool::AcquireStream sin pool (llamada desde {:08X}): sin stream, el sonido no "
+                  "empieza (vez {})",
+                  uint32_t(ctx.lr), n);
+    }
+    ctx.r3.u64 = 0;
+    return;
+  }
+  __imp__rw__audio__core__StreamPool__AcquireStream(ctx, base);
 }

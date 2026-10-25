@@ -22,6 +22,8 @@
 #include <rex/cvar.h>
 #include <rex/thread.h>
 
+#include "ds3_gpu.h"
+
 REXCVAR_DECLARE(bool, ignore_thread_priorities);
 
 REX_EXTERN(__imp__ds3_SetThreadPriority);
@@ -56,4 +58,15 @@ REX_EXTERN(ds3_D3D_GpuWaitStep) {
   } else {
     rex::thread::Sleep(std::chrono::microseconds(us));
   }
+}
+
+// D3DDevice_SetGammaRamp(device, flags, ramp): Direct3D corrects the game's ramp (GammaRampCorrected) and keeps it in
+// the device at +15408 (1536 bytes) for the display output; Displ_SetGamma calls it with the in-game brightness. The
+// Switch's output never saw it, so the brightness setting did nothing. After the original, the device's copy goes to
+// the renderer (ds3_gpu.cpp, applied at the next present; nfsmw_nativo_rampa_gamma = false turns it off there).
+REX_EXTERN(__imp__ds3_D3DDevice_SetGammaRamp);
+REX_EXTERN(ds3_D3DDevice_SetGammaRamp) {
+  const uint32_t dispositivo = ctx.r3.u32;
+  __imp__ds3_D3DDevice_SetGammaRamp(ctx, base);
+  ds3::gpu::PonerRampaGamma(REX_RAW_ADDR(dispositivo + 15408));
 }
