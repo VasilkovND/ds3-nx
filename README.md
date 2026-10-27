@@ -11,7 +11,7 @@ and dantes-inferno-nx, whose from-scratch codegen it uses.
 > code: the code, the shaders and the NRO are all made on your computer from your copy.
 
 Status: **1.0.1, stable and playable.** At stock clocks the game runs at 540p and 30 fps; with a mild overclock
-it runs at 720p, also at 30 fps. Tested on a console in handheld mode. Details and every problem met:
+it runs at 720p, also at 30 fps. Heavy fights at stock clocks can dip to 21-27 fps (the CPU is the limit there). Tested on a console in handheld mode. Details and every problem met:
 [ds3/PORTING.md](ds3/PORTING.md).
 
 ## Controls and options
