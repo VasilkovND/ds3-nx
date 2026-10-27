@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
+
+Stable and playable: 540p / 30 fps at stock clocks, 720p / 30 fps with a mild overclock.
+
 
 - The in-game brightness setting works: D3DDevice_SetGammaRamp's corrected ramp (device +15408) goes to the renderer's
   output table at the next present (from ds2-nx 1.2.2).

@@ -10,16 +10,15 @@ and dantes-inferno-nx, whose from-scratch codegen it uses.
 > You need your own copy of the game (both discs and Title Update 1). This repository contains no game data or game
 > code: the code, the shaders and the NRO are all made on your computer from your copy.
 
-Status: **1.0.0, playable.** Tested on a console in handheld mode from the start of the game through the prologue
-and into chapter 1, at stock clocks (540p, close to 30 fps) and overclocked (720p). Not tested yet: docked mode, Disc 2
-(chapters 5-10, the disc swap). Details and every problem met:
+Status: **1.0.1, stable and playable.** At stock clocks the game runs at 540p and 30 fps; with a mild overclock
+it runs at 720p, also at 30 fps. Tested on a console in handheld mode. Details and every problem met:
 [ds3/PORTING.md](ds3/PORTING.md).
 
 ## Controls and options
 
 | Combination | What it does |
 | --- | --- |
-| **ZL + ZR + Minus** | Opens the options menu over the game: **Up / Down** choose the resolution, **A** saves, **B** closes. While it is open the game does not see the controller |
+| **ZL + ZR + Minus** | Opens the options menu over the game: **Up / Down** choose a row (resolution, vibration), **Left / Right** change vibration strength, **A** saves, **B** closes. While it is open the game does not see the controller |
 
 **Resolution.** Two modes, chosen in the menu and saved in `ds3_resolucion.txt` beside the NRO; the game sets its
 scene size when it starts, so a new choice applies **at the next start**:
